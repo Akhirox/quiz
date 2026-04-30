@@ -16,7 +16,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-// Variables
+// Variables globales du jeu
 let currentUser = null;
 let allQuestions = []; 
 let gameQuestions = []; 
@@ -24,6 +24,11 @@ let currentQIndex = 0;
 let score = 0;
 let timerInterval;
 let timeLeft = 14;
+let attemptsLeft = 3;
+let isProcessingQuestion = false;
+
+// Tracker pour les statistiques de la partie en cours
+let gameStatsTracker = { correct: 0, totalTime: 0, themes: {} };
 
 // Menus
 const mainMenu = document.getElementById('main-menu');
@@ -58,6 +63,19 @@ onAuthStateChanged(auth, async (user) => {
         } else {
             afficherProfil(user, userSnap.data().xp);
         }
+
+        // Ajout du bouton Admin si c'est toi
+        if (user.email === "arnaud.chbk@gmail.com") { // <-- Remplace par ton email si besoin
+            if (!document.getElementById('btn-admin')) {
+                const adminBtn = document.createElement('button');
+                adminBtn.id = "btn-admin";
+                adminBtn.innerText = "🛠️ Admin";
+                adminBtn.className = "orange-btn";
+                adminBtn.style = "margin-top: 15px; background: #F44336; color: white; width: 100%; font-size: 1rem; padding: 5px;";
+                adminBtn.onclick = () => window.location.href = "import.html";
+                document.getElementById('logout-menu').insertBefore(adminBtn, document.getElementById('btn-logout'));
+            }
+        }
         
         chargerQuestions();
         mainMenu.style.display = 'block';
@@ -74,7 +92,6 @@ onAuthStateChanged(auth, async (user) => {
 
 document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
 
-// Clic sur l'avatar = Menu de déconnexion
 document.getElementById('user-info').addEventListener('click', () => {
     const menu = document.getElementById('logout-menu');
     menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
@@ -90,16 +107,6 @@ function afficherProfil(user, totalXp) {
     const lvlInfo = getLevelInfo(totalXp);
     const progressPercent = (lvlInfo.xpInCurrentLevel / lvlInfo.xpNeededForNext) * 100;
     
-// Remplace par ton adresse mail Google
-if (user.email === "arnaud.mathis26@gmail.com") {
-    const adminBtn = document.createElement('button');
-    adminBtn.innerText = "🛠️ Admin";
-    adminBtn.className = "orange-btn";
-    adminBtn.style = "margin-top: 15px; background: #F44336; color: white;";
-    adminBtn.onclick = () => window.location.href = "import.html";
-    document.getElementById('user-info-container').appendChild(adminBtn);
-}
-
     document.getElementById('user-info').innerHTML = `
         <div style="text-align: right; line-height: 1.2;">
             <div style="font-weight: bold; color: var(--text-orange);">${user.displayName}</div>
@@ -114,35 +121,21 @@ if (user.email === "arnaud.mathis26@gmail.com") {
 }
 
 // --- NAVIGATION BOUTONS ---
-document.getElementById('btn-menu-jouer').addEventListener('click', () => {
-    mainMenu.style.display = 'none';
-    playMenu.style.display = 'block';
-});
-
+document.getElementById('btn-menu-jouer').addEventListener('click', () => { mainMenu.style.display = 'none'; playMenu.style.display = 'block'; });
 document.getElementById('btn-menu-stats').addEventListener('click', () => afficherModaleStats());
-
-document.getElementById('btn-menu-leaderboard').addEventListener('click', () => {
-    chargerLeaderboard();
-    document.getElementById('leaderboard-modal').style.display = 'flex';
-});
-
-document.getElementById('btn-back-to-main').addEventListener('click', () => {
-    playMenu.style.display = 'none';
-    mainMenu.style.display = 'block';
-});
-
-document.getElementById('btn-vs-menu').addEventListener('click', () => {
-    playMenu.style.display = 'none';
-    vsLobby.style.display = 'block';
-});
-
-document.getElementById('btn-back-to-play').addEventListener('click', () => {
-    vsLobby.style.display = 'none';
-    playMenu.style.display = 'block';
-});
-
+document.getElementById('btn-menu-leaderboard').addEventListener('click', () => { chargerLeaderboard(); document.getElementById('leaderboard-modal').style.display = 'flex'; });
+document.getElementById('btn-back-to-main').addEventListener('click', () => { playMenu.style.display = 'none'; mainMenu.style.display = 'block'; });
+document.getElementById('btn-vs-menu').addEventListener('click', () => { playMenu.style.display = 'none'; vsLobby.style.display = 'block'; });
+document.getElementById('btn-back-to-play').addEventListener('click', () => { vsLobby.style.display = 'none'; playMenu.style.display = 'block'; });
 document.getElementById('close-stats').addEventListener('click', () => document.getElementById('stats-modal').style.display = 'none');
 document.getElementById('close-leaderboard').addEventListener('click', () => document.getElementById('leaderboard-modal').style.display = 'none');
+
+// Gestion provisoire des Salles Multijoueur
+document.querySelectorAll('.room-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        alert("PeerJS sera activé à la prochaine étape ! Prépare-toi pour le VS.");
+    });
+});
 
 // --- LEADERBOARD & MODALES ---
 async function chargerLeaderboard() {
@@ -156,16 +149,8 @@ async function chargerLeaderboard() {
         const data = docSnap.data();
         const li = document.createElement('li');
         li.className = 'leaderboard-item';
-        li.innerHTML = `
-            <span class="leaderboard-rank">#${rank}</span>
-            <img src="${data.photoURL}" style="width: 30px; border-radius: 50%;">
-            <span class="leaderboard-name">${data.displayName}</span>
-            <span class="leaderboard-xp">${data.xp} XP</span>
-        `;
-        li.addEventListener('click', () => {
-            document.getElementById('leaderboard-modal').style.display = 'none';
-            afficherModaleStats(data);
-        });
+        li.innerHTML = `<span class="leaderboard-rank">#${rank}</span><img src="${data.photoURL}" style="width: 30px; border-radius: 50%;"><span class="leaderboard-name">${data.displayName}</span><span class="leaderboard-xp">${data.xp} XP</span>`;
+        li.addEventListener('click', () => { document.getElementById('leaderboard-modal').style.display = 'none'; afficherModaleStats(data); });
         list.appendChild(li);
         rank++;
     });
@@ -188,8 +173,10 @@ async function afficherModaleStats(userData = null) {
     let themesHTML = '<h4>Top Thèmes</h4><ul style="font-size: 0.9rem; color: #ccc;">';
     if (stats.themes) {
         for (const [theme, tData] of Object.entries(stats.themes)) {
-            const tWinRate = Math.round((tData.correct / tData.total) * 100);
-            themesHTML += `<li>${theme} : ${tWinRate}% de réussite</li>`;
+            if (tData.total > 0) {
+                const tWinRate = Math.round((tData.correct / tData.total) * 100);
+                themesHTML += `<li>${theme} : ${tWinRate}% de réussite</li>`;
+            }
         }
     }
     themesHTML += '</ul>';
@@ -213,7 +200,7 @@ async function chargerQuestions() {
     querySnapshot.forEach((doc) => allQuestions.push(doc.data()));
 }
 
-// --- CORRECTEUR ORTHOGRAPHIQUE ---
+// --- CORRECTEUR ORTHOGRAPHIQUE AVEC SLASH (/) ---
 function nettoyerTexte(str) {
     let s = str.trim().toLowerCase();
     s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -234,37 +221,30 @@ function levenshteinDistance(a, b) {
 }
 function verifierReponse(input, correct) {
     const userNorm = nettoyerTexte(input);
-    
-    // On coupe la réponse de la BDD à chaque "/" pour créer une liste d'options
     const possiblesAnswers = correct.split('/').map(ans => ans.trim());
 
-    // On boucle pour tester la réponse du joueur contre CHAQUE option
     for (let possibleCorrect of possiblesAnswers) {
         const correctNorm = nettoyerTexte(possibleCorrect);
-        
-        if (userNorm === correctNorm) return true; // Match parfait
-        
+        if (userNorm === correctNorm) return true;
         const distance = levenshteinDistance(userNorm, correctNorm);
         const maxLength = Math.max(userNorm.length, correctNorm.length);
-        
         if (maxLength > 0) {
             const pourcentageRessemblance = (maxLength - distance) / maxLength;
-            // Si une des options valide les 85% de ressemblance, c'est gagné !
-            if (pourcentageRessemblance >= 0.85 || distance <= 1) {
-                return true;
-            }
+            if (pourcentageRessemblance >= 0.85 || distance <= 1) return true;
         }
     }
-    
-    // Si la boucle se termine, aucune option n'était la bonne
     return false;
 }
 
-// --- MOTEUR DE JEU SOLO ---
+// --- MOTEUR DE JEU SOLO (Avec Vies et Stats) ---
 document.getElementById('btn-solo').addEventListener('click', () => {
-    if (allQuestions.length < 10) return alert("Pas assez de questions !");
+    if (allQuestions.length < 10) return alert("Pas assez de questions dans la BDD !");
     gameQuestions = allQuestions.sort(() => 0.5 - Math.random()).slice(0, 10);
-    score = 0; currentQIndex = 0;
+    
+    score = 0; 
+    currentQIndex = 0;
+    gameStatsTracker = { correct: 0, totalTime: 0, themes: {} }; // Reset des stats de partie
+    
     playMenu.style.display = 'none';
     gameZone.style.display = 'block';
     afficherQuestion();
@@ -272,6 +252,9 @@ document.getElementById('btn-solo').addEventListener('click', () => {
 
 function afficherQuestion() {
     clearInterval(timerInterval);
+    isProcessingQuestion = false;
+    attemptsLeft = 3;
+    
     const q = gameQuestions[currentQIndex];
     document.getElementById('question-counter').innerText = `Question ${currentQIndex + 1}/10`;
     document.getElementById('question-theme').innerText = q.theme;
@@ -283,8 +266,13 @@ function afficherQuestion() {
 
     const input = document.getElementById('answer-input');
     input.value = ''; input.disabled = false; input.focus();
+    
     document.getElementById('feedback-msg').innerText = '';
     document.getElementById('submit-answer').style.display = 'inline-block';
+    
+    const attemptsDisplay = document.getElementById('attempts-left');
+    attemptsDisplay.style.display = 'block';
+    attemptsDisplay.innerText = `Essais restants : ${attemptsLeft}`;
     
     timeLeft = 14;
     document.getElementById('timer').innerText = timeLeft;
@@ -298,27 +286,74 @@ function afficherQuestion() {
 }
 
 function traiterReponse(userAnswer) {
-    clearInterval(timerInterval);
+    if (isProcessingQuestion) return; // Empêche le double clic
+
     const q = gameQuestions[currentQIndex];
     const isCorrect = verifierReponse(userAnswer, q.answer);
     
     const input = document.getElementById('answer-input');
     const feedback = document.getElementById('feedback-msg');
-    input.disabled = true;
-    document.getElementById('submit-answer').style.display = 'none';
-
-    if (isCorrect) { 
-        score++; 
-        feedback.innerText = "✅ Bonne réponse !"; 
-        feedback.style.color = "#4CAF50"; 
-    } else { 
-        // On récupère uniquement le premier élément avant le "/"
-        const reponsePrincipale = q.answer.split('/')[0].trim();
-        feedback.innerText = `❌ Faux ! La réponse était : ${reponsePrincipale}`; 
-        feedback.style.color = "#F44336"; 
+    
+    // Initialisation du tracker de thème si c'est la 1ere fois qu'on le voit dans la partie
+    if (!gameStatsTracker.themes[q.theme]) {
+        gameStatsTracker.themes[q.theme] = { correct: 0, total: 0 };
     }
 
-    setTimeout(passerQuestionSuivante, 2500);
+    if (isCorrect) {
+        isProcessingQuestion = true;
+        clearInterval(timerInterval);
+        score++;
+        
+        // Enregistrement des stats
+        const timeTaken = 14 - timeLeft;
+        gameStatsTracker.correct++;
+        gameStatsTracker.totalTime += timeTaken;
+        gameStatsTracker.themes[q.theme].correct++;
+        gameStatsTracker.themes[q.theme].total++;
+
+        input.disabled = true;
+        document.getElementById('submit-answer').style.display = 'none';
+        document.getElementById('attempts-left').style.display = 'none';
+
+        feedback.innerText = "✅ Bonne réponse !"; 
+        feedback.style.color = "#4CAF50"; 
+        setTimeout(passerQuestionSuivante, 2000);
+        
+    } else {
+        attemptsLeft--;
+        if (timeLeft <= 0) attemptsLeft = 0; // Si le temps est écoulé, c'est fini d'un coup
+
+        if (attemptsLeft > 0) {
+            // Faux mais il reste des essais
+            feedback.innerText = `❌ Faux ! Il te reste ${attemptsLeft} essai(s).`;
+            feedback.style.color = "#FF8C00";
+            input.value = '';
+            input.focus();
+            document.getElementById('attempts-left').innerText = `Essais restants : ${attemptsLeft}`;
+        } else {
+            // Plus d'essais ou temps écoulé
+            isProcessingQuestion = true;
+            clearInterval(timerInterval);
+            
+            // Stats : Pénalité temps max et +1 aux tentatives du thème (sans correct++)
+            gameStatsTracker.totalTime += 14; 
+            gameStatsTracker.themes[q.theme].total++;
+
+            input.disabled = true;
+            document.getElementById('submit-answer').style.display = 'none';
+            document.getElementById('attempts-left').style.display = 'none';
+
+            const reponsePrincipale = q.answer.split('/')[0].trim();
+            if (timeLeft <= 0) {
+                feedback.innerText = `⏰ Temps écoulé ! C'était : ${reponsePrincipale}`;
+            } else {
+                feedback.innerText = `❌ Faux ! La réponse était : ${reponsePrincipale}`;
+            }
+            feedback.style.color = "#F44336"; 
+            
+            setTimeout(passerQuestionSuivante, 2500);
+        }
+    }
 }
 
 document.getElementById('submit-answer').addEventListener('click', () => traiterReponse(document.getElementById('answer-input').value));
@@ -331,14 +366,32 @@ async function passerQuestionSuivante() {
     } else {
         gameZone.style.display = 'none';
         
-        // Maj de l'XP
-        if (score > 0) {
-            const userRef = doc(db, "users", currentUser.uid);
-            const userSnap = await getDoc(userRef);
-            const newXp = userSnap.data().xp + score;
-            await updateDoc(userRef, { xp: newXp });
-            afficherProfil(currentUser, newXp);
+        // Maj de l'XP ET DES STATS dans Firebase
+        const userRef = doc(db, "users", currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.data();
+        
+        const newXp = userData.xp + score;
+        const oldStats = userData.stats || { gamesPlayed: 0, correctAnswers: 0, totalAnswers: 0, totalAnswerTime: 0, themes: {} };
+        
+        // Construction du nouvel objet de stats
+        const newStats = {
+            gamesPlayed: oldStats.gamesPlayed + 1,
+            correctAnswers: oldStats.correctAnswers + gameStatsTracker.correct,
+            totalAnswers: oldStats.totalAnswers + 10,
+            totalAnswerTime: oldStats.totalAnswerTime + gameStatsTracker.totalTime,
+            themes: oldStats.themes || {}
+        };
+
+        // Fusion des stats de thèmes
+        for (const theme in gameStatsTracker.themes) {
+            if (!newStats.themes[theme]) newStats.themes[theme] = { correct: 0, total: 0 };
+            newStats.themes[theme].correct += gameStatsTracker.themes[theme].correct;
+            newStats.themes[theme].total += gameStatsTracker.themes[theme].total;
         }
+
+        await updateDoc(userRef, { xp: newXp, stats: newStats });
+        afficherProfil(currentUser, newXp); // Mise à jour de la barre visuelle
         
         // Affichage Ecran de fin
         document.getElementById('end-score').innerText = `${score}/10`;
@@ -348,11 +401,5 @@ async function passerQuestionSuivante() {
 }
 
 // Boutons écran de fin
-document.getElementById('btn-replay').addEventListener('click', () => {
-    document.getElementById('end-game-modal').style.display = 'none';
-    document.getElementById('btn-solo').click(); // Relance une partie
-});
-document.getElementById('btn-end-to-menu').addEventListener('click', () => {
-    document.getElementById('end-game-modal').style.display = 'none';
-    mainMenu.style.display = 'block';
-});
+document.getElementById('btn-replay').addEventListener('click', () => { document.getElementById('end-game-modal').style.display = 'none'; document.getElementById('btn-solo').click(); });
+document.getElementById('btn-end-to-menu').addEventListener('click', () => { document.getElementById('end-game-modal').style.display = 'none'; mainMenu.style.display = 'block'; });
