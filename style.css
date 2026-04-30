@@ -12,113 +12,53 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start; /* Changé pour la nouvelle UI */
+    justify-content: flex-start;
     min-height: 100vh;
 }
 
-#top-right-container {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    z-index: 50;
-}
-
-#user-info:hover {
-    background: #333;
-}
-
-#btn-logout:hover {
-    background: var(--text-orange);
-    color: var(--bg-dark);
-}
+#top-right-container { position: absolute; top: 20px; right: 20px; z-index: 50; }
+#user-info:hover { background: #333; }
+#btn-logout:hover { background: var(--text-orange); color: var(--bg-dark); }
 
 .title-glow {
-    font-size: 3rem;
-    font-weight: bold;
-    text-align: center;
-    text-transform: uppercase;
+    font-size: 3rem; font-weight: bold; text-align: center; text-transform: uppercase;
     color: var(--text-orange);
     text-shadow: 0 0 10px var(--glow-color), 0 0 20px var(--glow-color), 0 0 40px var(--text-orange);
     animation: float 3s ease-in-out infinite;
 }
 
-@keyframes float {
-    0% { transform: translateY(0px); }
-    50% { transform: translateY(-15px); }
-    100% { transform: translateY(0px); }
-}
+@keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
 
 .orange-btn {
-    padding: 12px 25px;
-    font-size: 1.2rem;
-    cursor: pointer;
-    background: var(--text-orange);
-    color: var(--bg-dark);
-    border: none;
-    border-radius: 8px;
-    font-weight: bold;
+    padding: 12px 25px; font-size: 1.2rem; cursor: pointer; background: var(--text-orange);
+    color: var(--bg-dark); border: none; border-radius: 8px; font-weight: bold;
     transition: transform 0.2s, box-shadow 0.2s;
 }
+.orange-btn:hover { transform: scale(1.05); box-shadow: 0 0 15px var(--glow-color); }
+.game-btn { display: block; width: 280px; margin: 15px auto; }
 
-.orange-btn:hover {
-    transform: scale(1.05);
-    box-shadow: 0 0 15px var(--glow-color);
-}
-
-.game-btn {
-    display: block;
-    width: 280px;
-    margin: 15px auto;
-}
-
+/* Champ de réponse : mis à jour pour s'adapter à la ligne Flexbox */
 #answer-input {
-    width: 80%;
-    padding: 15px;
-    font-size: 1.2rem;
-    border-radius: 8px;
-    border: 2px solid var(--text-orange);
-    background-color: #222;
-    color: white;
-    text-align: center;
-    outline: none;
+    padding: 15px; font-size: 1.2rem; border-radius: 8px;
+    border: 2px solid var(--text-orange); background-color: #222; color: white;
+    text-align: center; outline: none;
 }
+#answer-input:focus { box-shadow: 0 0 10px var(--glow-color); }
 
-#answer-input:focus {
-    box-shadow: 0 0 10px var(--glow-color);
-}
-
-/* Modales (Pop-ups internes) */
 .modal-overlay {
-    display: none;
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.8);
-    justify-content: center; align-items: center;
-    z-index: 1000;
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 1000;
 }
-
 .modal-content {
-    background: var(--bg-dark);
-    border: 2px solid var(--text-orange);
-    padding: 30px;
-    border-radius: 10px;
-    max-width: 500px;
-    width: 90%;
-    position: relative;
-    max-height: 80vh;
-    overflow-y: auto;
+    background: var(--bg-dark); border: 2px solid var(--text-orange); padding: 30px;
+    border-radius: 10px; max-width: 500px; width: 90%; position: relative;
+    max-height: 80vh; overflow-y: auto;
 }
-
 .close-btn {
-    position: absolute;
-    top: 10px; right: 15px;
-    background: none; border: none;
+    position: absolute; top: 10px; right: 15px; background: none; border: none;
     color: white; font-size: 1.5rem; cursor: pointer;
 }
-
-.leaderboard-item {
-    display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #444; cursor: pointer; transition: background 0.2s;
-}
+.leaderboard-item { display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #444; cursor: pointer; transition: background 0.2s; }
 .leaderboard-item:hover { background: #333; }
 .leaderboard-rank { font-weight: bold; width: 30px; color: var(--text-orange); }
 .leaderboard-name { flex: 1; margin-left: 10px; }
