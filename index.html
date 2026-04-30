@@ -5,23 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CHBK FUN - Quiz</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Importation de PeerJS pour le multijoueur -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
     <h1 class="title-glow">CHBK FUN</h1>
     
-    <!-- Zone de connexion et profil -->
+    <!-- Zone de connexion et profil avec la barre d'XP -->
     <div id="auth-section" style="text-align: center; margin-top: 1rem;">
         <button id="login-btn" class="orange-btn">Connexion avec Google</button>
         <div id="user-info"></div>
     </div>
 
-    <!-- Menu Principal (Caché tant qu'on n'est pas connecté) -->
+    <!-- Menu Principal -->
     <div id="main-menu" style="display: none; text-align: center; margin-top: 2rem;">
         <button id="btn-solo" class="orange-btn game-btn">Lancer Mode Solo (10 Q)</button>
-        <button id="btn-vs" class="orange-btn game-btn" style="opacity: 0.5; cursor: not-allowed;">Mode VS (Bientôt)</button>
+        <button id="btn-vs-menu" class="orange-btn game-btn">Mode VS (Multijoueur)</button>
     </div>
 
-    <!-- Zone de Jeu (Cachée par défaut) -->
+    <!-- Lobby Multijoueur (Caché par défaut) -->
+    <div id="vs-lobby" style="display: none; text-align: center; margin-top: 2rem;">
+        <h2>Mode VS</h2>
+        <div style="margin: 20px; padding: 20px; background: #222; border-radius: 8px; border: 1px solid var(--text-orange);">
+            <h3>Créer une partie</h3>
+            <button id="btn-host" class="orange-btn">Générer un code d'invitation</button>
+            <p id="host-code-display" style="font-size: 1.5rem; font-weight: bold; margin-top: 15px; letter-spacing: 2px;"></p>
+        </div>
+        
+        <div style="margin: 20px; padding: 20px; background: #222; border-radius: 8px; border: 1px solid var(--text-orange);">
+            <h3>Rejoindre un ami</h3>
+            <input type="text" id="join-code-input" placeholder="Code de la partie..." style="padding: 10px; font-size: 1.2rem; border-radius: 5px; border: none; text-align: center; width: 60%;">
+            <br><br>
+            <button id="btn-join" class="orange-btn">Rejoindre</button>
+        </div>
+        <button id="btn-back-menu" class="orange-btn" style="background: #555; color: white;">Retour au menu</button>
+    </div>
+
+    <!-- Zone de Jeu (Solo et VS) -->
     <div id="game-zone" style="display: none; text-align: center; margin-top: 2rem; width: 90%; max-width: 600px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <span id="question-counter" style="font-size: 1.2rem; font-weight: bold;">Question 1/10</span>

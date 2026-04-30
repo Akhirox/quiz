@@ -31,6 +31,37 @@ let score = 0;
 let timerInterval;
 let timeLeft = 14;
 
+// --- SYSTÈME DE NIVEAUX ---
+function getLevelInfo(totalXp) {
+    let level = 1;
+    let xpNeeded = 50; // XP requis pour passer du niv 1 au niv 2
+    let currentXp = totalXp;
+
+    while (currentXp >= xpNeeded) {
+        currentXp -= xpNeeded;
+        level++;
+        xpNeeded = Math.floor(xpNeeded * 1.5); // La difficulté augmente de 50% à chaque niveau
+    }
+    return { level, xpInCurrentLevel: currentXp, xpNeededForNext: xpNeeded };
+}
+
+function afficherProfil(user, totalXp) {
+    const lvlInfo = getLevelInfo(totalXp);
+    const progressPercent = (lvlInfo.xpInCurrentLevel / lvlInfo.xpNeededForNext) * 100;
+
+    userInfo.innerHTML = `
+        <img src="${user.photoURL}" style="width: 60px; border-radius: 50%; border: 2px solid var(--text-orange); margin-bottom: 10px;">
+        <div style="font-size: 1.2rem; font-weight: bold;">Niveau ${lvlInfo.level}</div>
+        <div style="font-size: 0.9rem; color: #ccc;">${lvlInfo.xpInCurrentLevel} / ${lvlInfo.xpNeededForNext} XP</div>
+        
+        <!-- Barre de progression -->
+        <div style="width: 200px; background: #333; height: 10px; border-radius: 5px; margin: 5px auto;">
+            <div style="width: ${progressPercent}%; background: var(--text-orange); height: 10px; border-radius: 5px; transition: width 0.5s ease-in-out;"></div>
+        </div>
+    `;
+}
+
+
 // --- AUTHENTIFICATION ---
 loginBtn.addEventListener('click', () => signInWithPopup(auth, provider));
 
@@ -44,12 +75,11 @@ onAuthStateChanged(auth, async (user) => {
 
         if (!userSnap.exists()) {
             await setDoc(userRef, { displayName: user.displayName, photoURL: user.photoURL, xp: 0 });
-            userInfo.innerHTML = `<img src="${user.photoURL}" style="width: 60px; border-radius: 50%; border: 2px solid var(--text-orange);"><p id="xp-display">XP: 0</p>`;
+            afficherProfil(user, 0);
         } else {
-            userInfo.innerHTML = `<img src="${user.photoURL}" style="width: 60px; border-radius: 50%; border: 2px solid var(--text-orange);"><p id="xp-display">XP: ${userSnap.data().xp}</p>`;
+            afficherProfil(user, userSnap.data().xp);
         }
         
-        // On charge les questions en arrière-plan et on affiche le menu
         chargerQuestions();
         mainMenu.style.display = 'block';
     } else {
@@ -87,11 +117,42 @@ function levenshteinDistance(a, b) {
 }
 
 function verifierReponse(input, correct) {
-    const userStr = input.trim().toLowerCase();
-    const correctStr = correct.trim().toLowerCase();
-    const maxTypos = correctStr.length > 5 ? 2 : 1; 
-    return levenshteinDistance(userStr, correctStr) <= maxTypos;
+    const userNorm = nettoyerTexte(input);
+    const correctNorm = nettoyerTexte(correct);
+    
+    // Si après nettoyage c'est exactement pareil, c'est gagné direct !
+    if (userNorm === correctNorm) return true;
+
+    // Calcul du nombre de fautes
+    const distance = levenshteinDistance(userNorm, correctNorm);
+    
+    // On prend la longueur du mot le plus long pour notre base de calcul
+    const maxLength = Math.max(userNorm.length, correctNorm.length);
+    
+    // Sécurité si les champs sont vides
+    if (maxLength === 0) return false;
+
+    // Calcul du pourcentage de ressemblance (1 = 100%, 0.85 = 85%)
+    const pourcentageRessemblance = (maxLength - distance) / maxLength;
+
+    // C'est valide SI on a au moins 85% de ressemblance OU si c'est un mot court avec juste 1 faute
+    return pourcentageRessemblance >= 0.85 || distance <= 1;
 }
+
+// --- NAVIGATION MENU ---
+const btnVsMenu = document.getElementById('btn-vs-menu');
+const vsLobby = document.getElementById('vs-lobby');
+const btnBackMenu = document.getElementById('btn-back-menu');
+
+btnVsMenu.addEventListener('click', () => {
+    mainMenu.style.display = 'none';
+    vsLobby.style.display = 'block';
+});
+
+btnBackMenu.addEventListener('click', () => {
+    vsLobby.style.display = 'none';
+    mainMenu.style.display = 'block';
+});
 
 // --- MOTEUR DE JEU SOLO ---
 btnSolo.addEventListener('click', () => {
@@ -184,13 +245,14 @@ async function passerQuestionSuivante() {
         gameZone.style.display = 'none';
         mainMenu.style.display = 'block';
         
-        // Mise à jour de l'XP dans la base de données
         if (score > 0) {
             const userRef = doc(db, "users", currentUser.uid);
             const userSnap = await getDoc(userRef);
             const newXp = userSnap.data().xp + score;
             await updateDoc(userRef, { xp: newXp });
-            document.getElementById('xp-display').innerText = `XP: ${newXp}`;
+            
+            // On met à jour l'affichage du profil avec la nouvelle barre de progression !
+            afficherProfil(currentUser, newXp);
         }
         
         alert(`Partie terminée ! Score : ${score}/10. Tu as gagné ${score} XP.`);
