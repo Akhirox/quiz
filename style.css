@@ -64,3 +64,25 @@ body {
 .leaderboard-name { flex: 1; margin-left: 10px; }
 .leaderboard-xp { font-weight: bold; }
 .room-btn { width: 120px; height: 80px; font-size: 1.3rem; }
+
+/* Ajoute ça tout à la fin de ton style.css */
+.player-live-card {
+    background: #333;
+    padding: 8px 15px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    border: 1px solid #555;
+}
+.recap-item {
+    background: #222;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    border-left: 5px solid var(--text-orange);
+}
