@@ -80,14 +80,15 @@
         <h3 id="question-theme" style="color: #ccc; text-transform: uppercase; font-size: 0.9rem;">Thème</h3>
         <p id="question-text" style="font-size: 1.5rem; margin: 20px 0; min-height: 80px;"></p>
         
-        <!-- Image agrandie -->
+       <!-- Image agrandie -->
         <img id="question-img" src="" alt="Image de la question" style="display: none; max-width: 100%; max-height: 450px; border-radius: 8px; margin: 0 auto 20px auto; border: 2px solid var(--text-orange);">
         
-        <!-- Cœurs (Vies) -->
-        <div id="hearts-display" style="font-size: 2rem; margin-bottom: 15px; height: 40px; letter-spacing: 5px;">❤️❤️❤️</div>
-        
-        <!-- Ligne de Saisie & Bouton -->
+        <!-- Ligne : Cœurs + Saisie + Bouton -->
         <div style="display: flex; justify-content: center; gap: 10px; align-items: stretch; max-width: 600px; margin: 0 auto;">
+            
+            <!-- Cœurs alignés à gauche -->
+            <div id="hearts-display" style="display: flex; align-items: center; font-size: 1.8rem; letter-spacing: 2px; white-space: nowrap; min-width: 90px; justify-content: flex-start;">❤️❤️❤️</div>
+            
             <input type="text" id="answer-input" placeholder="Écris ta réponse ici..." autocomplete="off" style="flex: 1; margin: 0;">
             <button id="submit-answer" class="orange-btn" style="margin: 0; padding: 0 25px;">Valider</button>
         </div>

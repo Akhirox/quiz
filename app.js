@@ -145,7 +145,9 @@ async function afficherModaleStats(userData = null) {
     const time = stats.totalAnswerTime || 0;
     
     const winRate = totalAns > 0 ? Math.round((correct / totalAns) * 100) : 0;
-    const avgSpeed = correct > 0 ? (time / correct).toFixed(1) : 0;
+    
+    // CORRECTION DU BUG ICI : On divise le temps total par le nombre TOTAL de questions (et non plus par le nombre de bonnes réponses)
+    const avgSpeed = totalAns > 0 ? (time / totalAns).toFixed(1) : 0;
 
     let themesHTML = '<h4>Top Thèmes</h4><ul style="font-size: 0.9rem; color: #ccc; text-align: left;">';
     if (stats.themes) {
