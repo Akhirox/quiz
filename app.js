@@ -90,6 +90,16 @@ function afficherProfil(user, totalXp) {
     const lvlInfo = getLevelInfo(totalXp);
     const progressPercent = (lvlInfo.xpInCurrentLevel / lvlInfo.xpNeededForNext) * 100;
     
+// Remplace par ton adresse mail Google
+if (user.email === "ton-adresse@gmail.com") {
+    const adminBtn = document.createElement('button');
+    adminBtn.innerText = "🛠️ Admin";
+    adminBtn.className = "orange-btn";
+    adminBtn.style = "margin-top: 15px; background: #F44336; color: white;";
+    adminBtn.onclick = () => window.location.href = "import.html";
+    document.getElementById('user-info-container').appendChild(adminBtn);
+}
+
     document.getElementById('user-info').innerHTML = `
         <div style="text-align: right; line-height: 1.2;">
             <div style="font-weight: bold; color: var(--text-orange);">${user.displayName}</div>
@@ -224,12 +234,30 @@ function levenshteinDistance(a, b) {
 }
 function verifierReponse(input, correct) {
     const userNorm = nettoyerTexte(input);
-    const correctNorm = nettoyerTexte(correct);
-    if (userNorm === correctNorm) return true;
-    const distance = levenshteinDistance(userNorm, correctNorm);
-    const maxLength = Math.max(userNorm.length, correctNorm.length);
-    if (maxLength === 0) return false;
-    return ((maxLength - distance) / maxLength) >= 0.85 || distance <= 1;
+    
+    // On coupe la réponse de la BDD à chaque "/" pour créer une liste d'options
+    const possiblesAnswers = correct.split('/').map(ans => ans.trim());
+
+    // On boucle pour tester la réponse du joueur contre CHAQUE option
+    for (let possibleCorrect of possiblesAnswers) {
+        const correctNorm = nettoyerTexte(possibleCorrect);
+        
+        if (userNorm === correctNorm) return true; // Match parfait
+        
+        const distance = levenshteinDistance(userNorm, correctNorm);
+        const maxLength = Math.max(userNorm.length, correctNorm.length);
+        
+        if (maxLength > 0) {
+            const pourcentageRessemblance = (maxLength - distance) / maxLength;
+            // Si une des options valide les 85% de ressemblance, c'est gagné !
+            if (pourcentageRessemblance >= 0.85 || distance <= 1) {
+                return true;
+            }
+        }
+    }
+    
+    // Si la boucle se termine, aucune option n'était la bonne
+    return false;
 }
 
 // --- MOTEUR DE JEU SOLO ---
@@ -279,8 +307,16 @@ function traiterReponse(userAnswer) {
     input.disabled = true;
     document.getElementById('submit-answer').style.display = 'none';
 
-    if (isCorrect) { score++; feedback.innerText = "✅ Bonne réponse !"; feedback.style.color = "#4CAF50"; } 
-    else { feedback.innerText = `❌ Faux ! La réponse était : ${q.answer}`; feedback.style.color = "#F44336"; }
+    if (isCorrect) { 
+        score++; 
+        feedback.innerText = "✅ Bonne réponse !"; 
+        feedback.style.color = "#4CAF50"; 
+    } else { 
+        // On récupère uniquement le premier élément avant le "/"
+        const reponsePrincipale = q.answer.split('/')[0].trim();
+        feedback.innerText = `❌ Faux ! La réponse était : ${reponsePrincipale}`; 
+        feedback.style.color = "#F44336"; 
+    }
 
     setTimeout(passerQuestionSuivante, 2500);
 }
