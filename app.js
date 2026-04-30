@@ -26,10 +26,12 @@ let gameQuestions = [];
 let currentQIndex = 0;
 let score = 0;
 let timerInterval;
-let recapInterval; // Nouveau timer pour le recap
+let recapInterval;
 let timeLeft = 14;
 let attemptsLeft = 3;
 let isProcessingQuestion = false;
+
+// Tracker pour l'XP et les Stats
 let gameStatsTracker = { correct: 0, totalTime: 0, themes: {} };
 
 let peer = null;
@@ -273,7 +275,6 @@ document.getElementById('btn-start-vs').addEventListener('click', () => {
     lancerCompteARebours();
 });
 
-// Modif de l'initialisation : création d'un tableau 'attemptedAnswers'
 function initMultiGameState() {
     multiGameState = {};
     lobbyPlayers.forEach(p => { multiGameState[p.uid] = { name: p.name, score: 0, status: 'playing', lives: 3, attemptedAnswers: [], pointsGained: 0 }; });
@@ -339,11 +340,10 @@ function afficherQuestion() {
     isProcessingQuestion = false; attemptsLeft = 3;
     
     if (isMultiplayer) {
-        // Reset à chaque nouvelle question !
         for (let uid in multiGameState) { 
             multiGameState[uid].status = 'playing'; 
             multiGameState[uid].lives = 3; 
-            multiGameState[uid].attemptedAnswers = []; // On vide le tableau des fails
+            multiGameState[uid].attemptedAnswers = []; 
             multiGameState[uid].pointsGained = 0; 
         }
         updateScoreboardUI();
@@ -392,12 +392,20 @@ function traiterReponse(userAnswer) {
     const isCorrect = verifierReponse(userAnswer, q.answer);
     const input = document.getElementById('answer-input');
     
+    // Initialisation du tracker pour le thème en cours
+    if (!gameStatsTracker.themes[q.theme]) gameStatsTracker.themes[q.theme] = { correct: 0, total: 0 };
+
     if (!isMultiplayer) {
-        if (!gameStatsTracker.themes[q.theme]) gameStatsTracker.themes[q.theme] = { correct: 0, total: 0 };
         if (isCorrect) {
             isProcessingQuestion = true; clearInterval(timerInterval);
-            score += timeLeft; audioCorrect.play(); 
-            gameStatsTracker.correct++; gameStatsTracker.totalTime += (14 - timeLeft); gameStatsTracker.themes[q.theme].correct++; gameStatsTracker.themes[q.theme].total++;
+            score++; audioCorrect.play(); 
+            
+            // Stats du joueur local
+            gameStatsTracker.correct++; 
+            gameStatsTracker.totalTime += (14 - timeLeft); 
+            gameStatsTracker.themes[q.theme].correct++; 
+            gameStatsTracker.themes[q.theme].total++;
+            
             input.disabled = true; document.getElementById('submit-answer').style.display = 'none';
             document.getElementById('feedback-msg').innerText = "✅ Bonne réponse !"; document.getElementById('feedback-msg').style.color = "#4CAF50"; 
             setTimeout(passerQuestionSuivante, 2000);
@@ -411,7 +419,11 @@ function traiterReponse(userAnswer) {
             } else {
                 isProcessingQuestion = true; clearInterval(timerInterval);
                 document.getElementById('hearts-display').innerText = '💔';
-                gameStatsTracker.totalTime += 14; gameStatsTracker.themes[q.theme].total++;
+                
+                // Stats du joueur local
+                gameStatsTracker.totalTime += 14; 
+                gameStatsTracker.themes[q.theme].total++;
+                
                 input.disabled = true; document.getElementById('submit-answer').style.display = 'none';
                 const rep = q.answer.split('/')[0].trim();
                 document.getElementById('feedback-msg').innerText = timeLeft <= 0 ? `⏰ Temps écoulé ! C'était : ${rep}` : `❌ Faux ! La réponse était : ${rep}`;
@@ -424,17 +436,31 @@ function traiterReponse(userAnswer) {
             isProcessingQuestion = true;
             input.disabled = true; document.getElementById('submit-answer').style.display = 'none';
             document.getElementById('feedback-msg').innerText = "✅ En attente des autres..."; document.getElementById('feedback-msg').style.color = "#4CAF50";
-            audioCorrect.play(); envoyerStatutHost('correct', attemptsLeft, userAnswer, timeLeft);
+            audioCorrect.play(); 
+            
+            // Stats du joueur local (Multi)
+            gameStatsTracker.correct++; 
+            gameStatsTracker.totalTime += (14 - timeLeft); 
+            gameStatsTracker.themes[q.theme].correct++; 
+            gameStatsTracker.themes[q.theme].total++;
+
+            envoyerStatutHost('correct', attemptsLeft, userAnswer, timeLeft);
         } else {
             attemptsLeft--; audioWrong.play();
             if (attemptsLeft > 0) {
                 document.getElementById('hearts-display').innerText = '❤️'.repeat(attemptsLeft);
                 document.getElementById('feedback-msg').innerText = `❌ Faux ! Encore une chance...`; document.getElementById('feedback-msg').style.color = "#FF8C00";
-                input.value = ''; input.focus(); envoyerStatutHost('playing', attemptsLeft, userAnswer, timeLeft);
+                input.value = ''; input.focus(); 
+                envoyerStatutHost('playing', attemptsLeft, userAnswer, timeLeft);
             } else {
                 isProcessingQuestion = true; document.getElementById('hearts-display').innerText = '💔';
                 input.disabled = true; document.getElementById('submit-answer').style.display = 'none';
                 document.getElementById('feedback-msg').innerText = "❌ Dommage ! En attente des autres..."; document.getElementById('feedback-msg').style.color = "#F44336";
+                
+                // Stats du joueur local (Multi)
+                gameStatsTracker.totalTime += 14; 
+                gameStatsTracker.themes[q.theme].total++;
+
                 envoyerStatutHost('out', 0, userAnswer, timeLeft);
             }
         }
@@ -454,10 +480,9 @@ function gererMajJoueur(data) {
     const p = multiGameState[data.uid];
     p.status = data.status; p.lives = data.lives;
     
-    // On sauvegarde toutes les réponses données (faux ou vrai)
     if (data.answer) p.attemptedAnswers.push(data.answer);
-    
     if (data.status === 'correct') p.timeLeftWhenCorrect = data.timeLeft;
+    
     updateScoreboardUI(); peerConnections.forEach(conn => conn.send({ type: 'SYNC_SCOREBOARD', state: multiGameState }));
     checkFinDeQuestionMulti();
 }
@@ -488,7 +513,7 @@ function checkFinDeQuestionMulti() {
 
 function afficherRecapMulti(correctAnswer) {
     clearInterval(timerInterval); updateScoreboardUI(); 
-    clearInterval(recapInterval); // Sécurité pour nettoyer un ancien compteur
+    clearInterval(recapInterval); 
     
     const overlay = document.getElementById('recap-overlay');
     document.getElementById('recap-correct-answer').innerText = correctAnswer;
@@ -505,7 +530,6 @@ function afficherRecapMulti(correctAnswer) {
         
         let ptsText = isCorrect ? `+${p.pointsGained} pts` : `0 pts`;
         
-        // C'est ici que la magie opère pour formater l'historique des réponses avec une petite flèche !
         let ansText = '<em>Temps écoulé</em>';
         if (p.attemptedAnswers && p.attemptedAnswers.length > 0) {
             ansText = p.attemptedAnswers.map(ans => `"${ans}"`).join(' <span style="color:#FF8C00; font-weight:bold;">➔</span> ');
@@ -523,7 +547,6 @@ function afficherRecapMulti(correctAnswer) {
     
     overlay.style.display = 'flex';
     
-    // Timer visuel dynamique !
     let countdown = 5;
     recapInterval = setInterval(() => {
         countdown--;
@@ -562,10 +585,27 @@ async function finDePartieLogic() {
     const userSnap = await getDoc(userRef);
     const userData = userSnap.data();
     
-    let finalScore = isMultiplayer ? multiGameState[currentUser.uid].score : score;
-    const newXp = userData.xp + finalScore;
+    // Le gain d'XP est STRICTEMENT égal au nombre de bonnes réponses trouvées par le joueur
+    const xpGained = gameStatsTracker.correct;
+    const newXp = userData.xp + xpGained;
     
-    await updateDoc(userRef, { xp: newXp });
+    // On met à jour les statistiques de profil complètes !
+    const oldStats = userData.stats || { gamesPlayed: 0, correctAnswers: 0, totalAnswers: 0, totalAnswerTime: 0, themes: {} };
+    const newStats = {
+        gamesPlayed: oldStats.gamesPlayed + 1,
+        correctAnswers: oldStats.correctAnswers + gameStatsTracker.correct,
+        totalAnswers: oldStats.totalAnswers + 10,
+        totalAnswerTime: oldStats.totalAnswerTime + gameStatsTracker.totalTime,
+        themes: oldStats.themes || {}
+    };
+
+    for (const theme in gameStatsTracker.themes) {
+        if (!newStats.themes[theme]) newStats.themes[theme] = { correct: 0, total: 0 };
+        newStats.themes[theme].correct += gameStatsTracker.themes[theme].correct;
+        newStats.themes[theme].total += gameStatsTracker.themes[theme].total;
+    }
+
+    await updateDoc(userRef, { xp: newXp, stats: newStats });
     afficherProfil(currentUser, newXp);
     
     // --- GESTION DE L'AFFICHAGE DE FIN ---
@@ -583,8 +623,9 @@ async function finDePartieLogic() {
         btnReplay.style.display = 'block';
         btnLobby.style.display = 'none';
 
-        document.getElementById('end-score').innerText = `${finalScore}/10`;
-        document.getElementById('end-xp').innerText = `+${finalScore} XP`;
+        // L'affichage du score est juste le nombre de bonnes réponses
+        document.getElementById('end-score').innerText = `${xpGained}/10`;
+        document.getElementById('end-xp').innerText = `+${xpGained} XP`;
     } else {
         // --- MODE MULTIJOUEUR ---
         modalTitle.innerText = "Classement Final";
@@ -593,18 +634,16 @@ async function finDePartieLogic() {
         btnReplay.style.display = 'none';
         btnLobby.style.display = 'block';
 
-        // Tri des joueurs par score pour le podium
         const sortedPlayers = Object.values(multiGameState).sort((a, b) => b.score - a.score);
         const winner = sortedPlayers[0];
 
-        // Message de victoire
         document.getElementById('multi-winner-msg').innerText = `🏆 ${winner.name} remporte la partie !`;
-        document.getElementById('multi-end-xp').innerText = `+${finalScore} XP`;
+        // L'XP affichée en multi dépend elle aussi UNIQUEMENT des bonnes réponses
+        document.getElementById('multi-end-xp').innerText = `+${xpGained} XP`;
 
         const list = document.getElementById('multi-ranking-list');
         list.innerHTML = '';
         
-        // Création du podium
         sortedPlayers.forEach((p, index) => {
             const tr = document.createElement('tr');
             let rankIcon = `${index + 1}e`;
@@ -612,7 +651,6 @@ async function finDePartieLogic() {
             if (index === 1) rankIcon = '🥈 2e';
             if (index === 2) rankIcon = '🥉 3e';
 
-            // Met en surbrillance ta propre ligne
             const isMe = p.uid === currentUser.uid;
 
             tr.innerHTML = `
@@ -626,32 +664,17 @@ async function finDePartieLogic() {
 
     document.getElementById('end-game-modal').style.display = 'flex';
     
-    // On détruit la session Multi proprement pour repartir de zéro sur la prochaine game
     if (peer) {
         peer.destroy(); 
         peer = null; peerConn = null; peerConnections = []; lobbyPlayers = [];
     }
 }
 
-// --- GESTION DES BOUTONS DE FIN ---
-document.getElementById('btn-replay').addEventListener('click', () => { 
-    document.getElementById('end-game-modal').style.display = 'none'; 
-    document.getElementById('btn-solo').click(); 
-});
-
+document.getElementById('btn-replay').addEventListener('click', () => { document.getElementById('end-game-modal').style.display = 'none'; document.getElementById('btn-solo').click(); });
 document.getElementById('btn-back-lobby').addEventListener('click', () => { 
     document.getElementById('end-game-modal').style.display = 'none'; 
-    
-    // On réaffiche la sélection des salles proprement
     document.getElementById('room-buttons').style.display = 'flex';
     document.getElementById('waiting-room').style.display = 'none';
     vsLobby.style.display = 'block'; 
 });
-
-document.getElementById('btn-end-to-menu').addEventListener('click', () => { 
-    document.getElementById('end-game-modal').style.display = 'none'; 
-    mainMenu.style.display = 'block'; 
-});
-
-document.getElementById('btn-replay').addEventListener('click', () => { document.getElementById('end-game-modal').style.display = 'none'; document.getElementById('btn-solo').click(); });
 document.getElementById('btn-end-to-menu').addEventListener('click', () => { document.getElementById('end-game-modal').style.display = 'none'; mainMenu.style.display = 'block'; });
