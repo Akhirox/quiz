@@ -91,7 +91,7 @@ function afficherProfil(user, totalXp) {
     const progressPercent = (lvlInfo.xpInCurrentLevel / lvlInfo.xpNeededForNext) * 100;
     
 // Remplace par ton adresse mail Google
-if (user.email === "ton-adresse@gmail.com") {
+if (user.email === "arnaud.mathis26@gmail.com") {
     const adminBtn = document.createElement('button');
     adminBtn.innerText = "🛠️ Admin";
     adminBtn.className = "orange-btn";
