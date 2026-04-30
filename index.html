@@ -118,10 +118,46 @@
         </div>
     </div>
 
-    <!-- MODALES -->
+   <!-- MODALES -->
     <div id="stats-modal" class="modal-overlay"><div class="modal-content"><button class="close-btn" id="close-stats">&times;</button><div id="stats-content"></div></div></div>
+    
     <div id="leaderboard-modal" class="modal-overlay"><div class="modal-content"><button class="close-btn" id="close-leaderboard">&times;</button><h2 style="margin-top: 0; text-align: center; color: var(--text-orange);">🏆 Classement</h2><ul id="leaderboard-list" style="list-style: none; padding: 0; text-align: left; margin: 0;"></ul></div></div>
-    <div id="end-game-modal" class="modal-overlay"><div class="modal-content" style="text-align: center;"><h2 style="color: var(--text-orange); font-size: 2rem; margin-top: 0;">Partie Terminée !</h2><p style="font-size: 1.2rem;">Score final : <strong id="end-score" style="font-size: 1.5rem;">0</strong></p><div style="margin-top: 30px; display: flex; justify-content: center; gap: 15px;"><button id="btn-replay" class="orange-btn">Rejouer</button><button id="btn-end-to-menu" class="orange-btn" style="background: #555; color: white;">Menu Principal</button></div></div></div>
+    
+    <!-- MODALE FIN DE PARTIE (Mise à jour pour le Multi) -->
+    <div id="end-game-modal" class="modal-overlay">
+        <div class="modal-content" style="text-align: center; max-width: 600px;">
+            <h2 id="end-game-title" style="color: var(--text-orange); font-size: 2.5rem; margin-top: 0;">Partie Terminée !</h2>
+            
+            <!-- Zone d'affichage SOLO -->
+            <div id="end-solo-zone" style="display: none;">
+                <p style="font-size: 1.2rem;">Score final : <strong id="end-score" style="font-size: 1.5rem;">0/10</strong></p>
+                <p style="font-size: 1.2rem; color: #4CAF50;">Gain : <strong id="end-xp">+0 XP</strong></p>
+            </div>
+
+            <!-- Zone d'affichage MULTIJOUEUR -->
+            <div id="end-multi-zone" style="display: none; margin: 20px 0;">
+                <h3 id="multi-winner-msg" style="color: #4CAF50; font-size: 1.8rem; margin-bottom: 20px;">Pseudo remporte la partie !</h3>
+                <table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 1.2rem; color: white;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--text-orange); color: var(--text-orange);">
+                            <th style="padding: 10px;">Rang</th>
+                            <th style="padding: 10px;">Joueur</th>
+                            <th style="padding: 10px; text-align: right;">Points</th>
+                        </tr>
+                    </thead>
+                    <tbody id="multi-ranking-list"></tbody>
+                </table>
+                <p style="font-size: 1.2rem; color: #4CAF50; margin-top: 20px;">Ton gain personnel : <strong id="multi-end-xp">+0 XP</strong></p>
+            </div>
+
+            <!-- Boutons de fin -->
+            <div style="margin-top: 30px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+                <button id="btn-replay" class="orange-btn" style="display: none;">Rejouer (Solo)</button>
+                <button id="btn-back-lobby" class="orange-btn" style="display: none;">Retour au Lobby</button>
+                <button id="btn-end-to-menu" class="orange-btn" style="background: #555; color: white;">Menu Principal</button>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="app.js"></script>
 </body>

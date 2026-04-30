@@ -568,13 +568,90 @@ async function finDePartieLogic() {
     await updateDoc(userRef, { xp: newXp });
     afficherProfil(currentUser, newXp);
     
-    document.getElementById('end-score').innerText = isMultiplayer ? `${finalScore} pts` : `${finalScore}/10`;
-    document.getElementById('end-xp').innerText = `+${finalScore} XP`;
+    // --- GESTION DE L'AFFICHAGE DE FIN ---
+    const modalTitle = document.getElementById('end-game-title');
+    const soloZone = document.getElementById('end-solo-zone');
+    const multiZone = document.getElementById('end-multi-zone');
+    const btnReplay = document.getElementById('btn-replay');
+    const btnLobby = document.getElementById('btn-back-lobby');
+
+    if (!isMultiplayer) {
+        // --- MODE SOLO ---
+        modalTitle.innerText = "Partie Terminée !";
+        soloZone.style.display = 'block';
+        multiZone.style.display = 'none';
+        btnReplay.style.display = 'block';
+        btnLobby.style.display = 'none';
+
+        document.getElementById('end-score').innerText = `${finalScore}/10`;
+        document.getElementById('end-xp').innerText = `+${finalScore} XP`;
+    } else {
+        // --- MODE MULTIJOUEUR ---
+        modalTitle.innerText = "Classement Final";
+        soloZone.style.display = 'none';
+        multiZone.style.display = 'block';
+        btnReplay.style.display = 'none';
+        btnLobby.style.display = 'block';
+
+        // Tri des joueurs par score pour le podium
+        const sortedPlayers = Object.values(multiGameState).sort((a, b) => b.score - a.score);
+        const winner = sortedPlayers[0];
+
+        // Message de victoire
+        document.getElementById('multi-winner-msg').innerText = `🏆 ${winner.name} remporte la partie !`;
+        document.getElementById('multi-end-xp').innerText = `+${finalScore} XP`;
+
+        const list = document.getElementById('multi-ranking-list');
+        list.innerHTML = '';
+        
+        // Création du podium
+        sortedPlayers.forEach((p, index) => {
+            const tr = document.createElement('tr');
+            let rankIcon = `${index + 1}e`;
+            if (index === 0) rankIcon = '🥇 1er';
+            if (index === 1) rankIcon = '🥈 2e';
+            if (index === 2) rankIcon = '🥉 3e';
+
+            // Met en surbrillance ta propre ligne
+            const isMe = p.uid === currentUser.uid;
+
+            tr.innerHTML = `
+                <td style="padding: 10px; font-weight: bold; color: ${index === 0 ? '#FFD700' : 'white'};">${rankIcon}</td>
+                <td style="padding: 10px; ${isMe ? 'color: var(--text-orange); font-weight: bold;' : ''}">${p.name} ${isMe ? '(Toi)' : ''}</td>
+                <td style="padding: 10px; text-align: right; font-weight: bold; color: var(--text-orange);">${p.score} pts</td>
+            `;
+            list.appendChild(tr);
+        });
+    }
+
     document.getElementById('end-game-modal').style.display = 'flex';
     
-    if (peer) peer.destroy(); 
-    peer = null; peerConn = null; peerConnections = []; lobbyPlayers = [];
+    // On détruit la session Multi proprement pour repartir de zéro sur la prochaine game
+    if (peer) {
+        peer.destroy(); 
+        peer = null; peerConn = null; peerConnections = []; lobbyPlayers = [];
+    }
 }
+
+// --- GESTION DES BOUTONS DE FIN ---
+document.getElementById('btn-replay').addEventListener('click', () => { 
+    document.getElementById('end-game-modal').style.display = 'none'; 
+    document.getElementById('btn-solo').click(); 
+});
+
+document.getElementById('btn-back-lobby').addEventListener('click', () => { 
+    document.getElementById('end-game-modal').style.display = 'none'; 
+    
+    // On réaffiche la sélection des salles proprement
+    document.getElementById('room-buttons').style.display = 'flex';
+    document.getElementById('waiting-room').style.display = 'none';
+    vsLobby.style.display = 'block'; 
+});
+
+document.getElementById('btn-end-to-menu').addEventListener('click', () => { 
+    document.getElementById('end-game-modal').style.display = 'none'; 
+    mainMenu.style.display = 'block'; 
+});
 
 document.getElementById('btn-replay').addEventListener('click', () => { document.getElementById('end-game-modal').style.display = 'none'; document.getElementById('btn-solo').click(); });
 document.getElementById('btn-end-to-menu').addEventListener('click', () => { document.getElementById('end-game-modal').style.display = 'none'; mainMenu.style.display = 'block'; });
