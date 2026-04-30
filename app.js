@@ -26,6 +26,7 @@ let gameQuestions = [];
 let currentQIndex = 0;
 let score = 0;
 let timerInterval;
+let recapInterval; // Nouveau timer pour le recap
 let timeLeft = 14;
 let attemptsLeft = 3;
 let isProcessingQuestion = false;
@@ -199,8 +200,7 @@ function rejoindreOuCreerSalle(roomID) {
     peer.on('open', () => {
         isHost = true; isMultiplayer = true; peerConnections = [];
         lobbyPlayers = [{ uid: currentUser.uid, name: currentUser.displayName }];
-        majLobbyUI();
-        document.getElementById('btn-start-vs').style.display = 'block';
+        majLobbyUI(); document.getElementById('btn-start-vs').style.display = 'block';
 
         peer.on('connection', (conn) => {
             if (peerConnections.length >= 9) { conn.send({ type: 'LOBBY_FULL' }); setTimeout(() => conn.close(), 500); return; }
@@ -236,11 +236,13 @@ function rejoindreOuCreerSalle(roomID) {
                     else if (data.type === 'SYNC_SCOREBOARD') { multiGameState = data.state; updateScoreboardUI(); }
                     else if (data.type === 'END_QUESTION') { multiGameState = data.state; afficherRecapMulti(data.correctAnswer); }
                     else if (data.type === 'NEXT_QUESTION') { 
+                        clearInterval(recapInterval);
                         document.getElementById('recap-overlay').style.display = 'none';
                         currentQIndex++; 
                         lancerCompteARebours("Question suivante...", 2); 
                     }
                     else if (data.type === 'END_GAME') {
+                        clearInterval(recapInterval);
                         document.getElementById('recap-overlay').style.display = 'none';
                         finDePartieLogic();
                     }
@@ -271,9 +273,10 @@ document.getElementById('btn-start-vs').addEventListener('click', () => {
     lancerCompteARebours();
 });
 
+// Modif de l'initialisation : création d'un tableau 'attemptedAnswers'
 function initMultiGameState() {
     multiGameState = {};
-    lobbyPlayers.forEach(p => { multiGameState[p.uid] = { name: p.name, score: 0, status: 'playing', lives: 3, lastAnswer: '', pointsGained: 0 }; });
+    lobbyPlayers.forEach(p => { multiGameState[p.uid] = { name: p.name, score: 0, status: 'playing', lives: 3, attemptedAnswers: [], pointsGained: 0 }; });
 }
 
 // --- MOTEUR DE JEU ---
@@ -287,7 +290,7 @@ document.getElementById('btn-solo').addEventListener('click', () => {
 
 function lancerCompteARebours(texte = "Préparez-vous...", duree = 3) {
     playMenu.style.display = 'none'; vsLobby.style.display = 'none'; 
-    gameZone.style.display = 'flex'; // On affiche la grille flexbox
+    gameZone.style.display = 'flex'; 
     
     if (isMultiplayer) { 
         document.getElementById('multiplayer-board').style.display = 'block'; 
@@ -336,7 +339,13 @@ function afficherQuestion() {
     isProcessingQuestion = false; attemptsLeft = 3;
     
     if (isMultiplayer) {
-        for (let uid in multiGameState) { multiGameState[uid].status = 'playing'; multiGameState[uid].lives = 3; multiGameState[uid].lastAnswer = ''; multiGameState[uid].pointsGained = 0; }
+        // Reset à chaque nouvelle question !
+        for (let uid in multiGameState) { 
+            multiGameState[uid].status = 'playing'; 
+            multiGameState[uid].lives = 3; 
+            multiGameState[uid].attemptedAnswers = []; // On vide le tableau des fails
+            multiGameState[uid].pointsGained = 0; 
+        }
         updateScoreboardUI();
     }
     
@@ -443,7 +452,11 @@ function envoyerStatutHost(status, lives, answer, tLeft) {
 function gererMajJoueur(data) {
     if (!isHost) return;
     const p = multiGameState[data.uid];
-    p.status = data.status; p.lives = data.lives; p.lastAnswer = data.answer;
+    p.status = data.status; p.lives = data.lives;
+    
+    // On sauvegarde toutes les réponses données (faux ou vrai)
+    if (data.answer) p.attemptedAnswers.push(data.answer);
+    
     if (data.status === 'correct') p.timeLeftWhenCorrect = data.timeLeft;
     updateScoreboardUI(); peerConnections.forEach(conn => conn.send({ type: 'SYNC_SCOREBOARD', state: multiGameState }));
     checkFinDeQuestionMulti();
@@ -475,13 +488,14 @@ function checkFinDeQuestionMulti() {
 
 function afficherRecapMulti(correctAnswer) {
     clearInterval(timerInterval); updateScoreboardUI(); 
+    clearInterval(recapInterval); // Sécurité pour nettoyer un ancien compteur
     
     const overlay = document.getElementById('recap-overlay');
     document.getElementById('recap-correct-answer').innerText = correctAnswer;
+    document.getElementById('recap-next-timer').innerHTML = `Prochaine question dans <span id="recap-seconds">5</span>s...`;
     
     const list = document.getElementById('recap-list'); list.innerHTML = '';
     
-    // Trie pour le tableau final (Meilleurs points en haut)
     const sortedPlayers = Object.values(multiGameState).sort((a, b) => b.pointsGained - a.pointsGained);
     
     sortedPlayers.forEach(p => {
@@ -490,7 +504,13 @@ function afficherRecapMulti(correctAnswer) {
         tr.className = `recap-item-row ${isCorrect ? 'correct' : 'wrong'}`;
         
         let ptsText = isCorrect ? `+${p.pointsGained} pts` : `0 pts`;
-        let ansText = p.lastAnswer ? `"${p.lastAnswer}"` : `<em>Temps écoulé</em>`;
+        
+        // C'est ici que la magie opère pour formater l'historique des réponses avec une petite flèche !
+        let ansText = '<em>Temps écoulé</em>';
+        if (p.attemptedAnswers && p.attemptedAnswers.length > 0) {
+            ansText = p.attemptedAnswers.map(ans => `"${ans}"`).join(' <span style="color:#FF8C00; font-weight:bold;">➔</span> ');
+        }
+        
         let icon = isCorrect ? '✅' : '❌';
         
         tr.innerHTML = `
@@ -503,8 +523,21 @@ function afficherRecapMulti(correctAnswer) {
     
     overlay.style.display = 'flex';
     
+    // Timer visuel dynamique !
+    let countdown = 5;
+    recapInterval = setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+            document.getElementById('recap-seconds').innerText = countdown;
+        } else {
+            clearInterval(recapInterval);
+            document.getElementById('recap-next-timer').innerText = "Chargement...";
+        }
+    }, 1000);
+    
     if (isHost) {
         setTimeout(() => {
+            clearInterval(recapInterval);
             overlay.style.display = 'none';
             currentQIndex++;
             if (currentQIndex < 10) {

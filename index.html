@@ -53,19 +53,18 @@
         <button id="btn-back-to-play" class="orange-btn" style="background: #555; color: white;">Retour</button>
     </div>
 
-    <!-- ZONE DE JEU PRINCIPALE (Flexbox pour séparer Gauche/Droite) -->
+    <!-- ZONE DE JEU -->
     <div id="game-zone" style="display: none; justify-content: center; align-items: flex-start; gap: 20px; margin-top: 1rem; width: 95%; max-width: 1000px;">
         
         <!-- Bloc Central : Question & Réponses -->
         <div id="question-area" style="flex: 1; max-width: 700px; background: #1a1a1a; padding: 25px; border-radius: 12px; border: 1px solid #333; position: relative;">
             
-            <!-- OVERLAY 1 : Compte à rebours -->
             <div id="countdown-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(18, 18, 18, 0.95); z-index: 50; flex-direction: column; justify-content: center; align-items: center; border-radius: 12px;">
                 <h2 id="countdown-text" style="color: var(--text-orange); font-size: 2.5rem; text-align: center;">Préparez-vous...</h2>
                 <div id="countdown-number" style="font-size: 8rem; font-weight: bold; color: white; text-shadow: 0 0 20px var(--text-orange);">3</div>
             </div>
 
-            <!-- OVERLAY 2 : Récapitulatif fin de question -->
+            <!-- Écran Récapitulatif Amélioré -->
             <div id="recap-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(18, 18, 18, 0.98); z-index: 40; flex-direction: column; justify-content: flex-start; align-items: center; border-radius: 12px; padding-top: 30px; overflow-y: auto;">
                 <h2 style="color: var(--text-orange); font-size: 2rem; margin-top: 0;">Fin de la question !</h2>
                 <p style="font-size: 1.2rem; margin-bottom: 5px; color: white;">La bonne réponse était :</p>
@@ -75,12 +74,15 @@
                     <thead>
                         <tr style="border-bottom: 2px solid var(--text-orange); color: var(--text-orange);">
                             <th style="padding: 10px;">Joueur</th>
-                            <th style="padding: 10px;">Réponse donnée</th>
+                            <th style="padding: 10px;">Réponses données</th>
                             <th style="padding: 10px; text-align: right;">Points</th>
                         </tr>
                     </thead>
                     <tbody id="recap-list"></tbody>
                 </table>
+                
+                <!-- NOUVEAU : Le compte à rebours dynamique -->
+                <h3 id="recap-next-timer" style="color: #aaa; margin-top: 30px; font-weight: normal;">Prochaine question dans <span id="recap-seconds">5</span>s...</h3>
             </div>
 
             <!-- En-tête de question -->
@@ -89,7 +91,6 @@
                 <span id="timer-text" style="font-size: 2rem; font-weight: bold; color: #4CAF50;">14</span>
             </div>
 
-            <!-- Barre de Temps -->
             <div style="width: 100%; background: #333; height: 12px; border-radius: 6px; margin-bottom: 15px; overflow: hidden;">
                 <div id="timer-bar" style="width: 100%; height: 100%; background: #4CAF50; transition: width 1s linear, background-color 1s linear;"></div>
             </div>
@@ -110,7 +111,7 @@
             <p id="feedback-msg" style="font-size: 1.2rem; font-weight: bold; height: 30px; margin-top: 15px;"></p>
         </div>
 
-        <!-- Bloc Droit : Tableau des scores Multijoueur -->
+        <!-- Bloc Droit : Scoreboard -->
         <div id="multiplayer-board" style="display: none; width: 280px; background: #1a1a1a; border-radius: 12px; padding: 20px; border: 1px solid var(--text-orange); flex-shrink: 0; align-self: flex-start;">
             <h3 style="margin: 0 0 20px 0; color: var(--text-orange); text-align: center; font-size: 1.4rem;">🏆 En direct</h3>
             <div id="multiplayer-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
@@ -118,29 +119,9 @@
     </div>
 
     <!-- MODALES -->
-    <div id="stats-modal" class="modal-overlay">
-        <div class="modal-content">
-            <button class="close-btn" id="close-stats">&times;</button>
-            <div id="stats-content"></div>
-        </div>
-    </div>
-    <div id="leaderboard-modal" class="modal-overlay">
-        <div class="modal-content">
-            <button class="close-btn" id="close-leaderboard">&times;</button>
-            <h2 style="margin-top: 0; text-align: center; color: var(--text-orange);">🏆 Classement</h2>
-            <ul id="leaderboard-list" style="list-style: none; padding: 0; text-align: left; margin: 0;"></ul>
-        </div>
-    </div>
-    <div id="end-game-modal" class="modal-overlay">
-        <div class="modal-content" style="text-align: center;">
-            <h2 style="color: var(--text-orange); font-size: 2rem; margin-top: 0;">Partie Terminée !</h2>
-            <p style="font-size: 1.2rem;">Score final : <strong id="end-score" style="font-size: 1.5rem;">0</strong></p>
-            <div style="margin-top: 30px; display: flex; justify-content: center; gap: 15px;">
-                <button id="btn-replay" class="orange-btn">Rejouer</button>
-                <button id="btn-end-to-menu" class="orange-btn" style="background: #555; color: white;">Menu Principal</button>
-            </div>
-        </div>
-    </div>
+    <div id="stats-modal" class="modal-overlay"><div class="modal-content"><button class="close-btn" id="close-stats">&times;</button><div id="stats-content"></div></div></div>
+    <div id="leaderboard-modal" class="modal-overlay"><div class="modal-content"><button class="close-btn" id="close-leaderboard">&times;</button><h2 style="margin-top: 0; text-align: center; color: var(--text-orange);">🏆 Classement</h2><ul id="leaderboard-list" style="list-style: none; padding: 0; text-align: left; margin: 0;"></ul></div></div>
+    <div id="end-game-modal" class="modal-overlay"><div class="modal-content" style="text-align: center;"><h2 style="color: var(--text-orange); font-size: 2rem; margin-top: 0;">Partie Terminée !</h2><p style="font-size: 1.2rem;">Score final : <strong id="end-score" style="font-size: 1.5rem;">0</strong></p><div style="margin-top: 30px; display: flex; justify-content: center; gap: 15px;"><button id="btn-replay" class="orange-btn">Rejouer</button><button id="btn-end-to-menu" class="orange-btn" style="background: #555; color: white;">Menu Principal</button></div></div></div>
 
     <script type="module" src="app.js"></script>
 </body>
