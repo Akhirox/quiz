@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -16,7 +16,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-// --- VARIABLES GLOBALES ET ÉLÉMENTS DOM ---
+// Variables
 let currentUser = null;
 let allQuestions = []; 
 let gameQuestions = []; 
@@ -25,19 +25,17 @@ let score = 0;
 let timerInterval;
 let timeLeft = 14;
 
-const btnSolo = document.getElementById('btn-solo');
+// Menus
 const mainMenu = document.getElementById('main-menu');
+const playMenu = document.getElementById('play-menu');
+const vsLobby = document.getElementById('vs-lobby');
 const gameZone = document.getElementById('game-zone');
 
-// --- GESTION DU PROFIL ET STATISTIQUES ---
+// --- PROFIL & DÉCONNEXION ---
 function getLevelInfo(totalXp) {
-    let level = 1;
-    let xpNeeded = 50; 
-    let currentXp = totalXp;
+    let level = 1, xpNeeded = 50, currentXp = totalXp;
     while (currentXp >= xpNeeded) {
-        currentXp -= xpNeeded;
-        level++;
-        xpNeeded = Math.floor(xpNeeded * 1.5);
+        currentXp -= xpNeeded; level++; xpNeeded = Math.floor(xpNeeded * 1.5);
     }
     return { level, xpInCurrentLevel: currentXp, xpNeededForNext: xpNeeded };
 }
@@ -52,16 +50,8 @@ onAuthStateChanged(auth, async (user) => {
 
         if (!userSnap.exists()) {
             const defaultData = { 
-                displayName: user.displayName, 
-                photoURL: user.photoURL, 
-                xp: 0,
-                stats: {
-                    gamesPlayed: 0,
-                    correctAnswers: 0,
-                    totalAnswers: 0,
-                    totalAnswerTime: 0,
-                    themes: {}
-                }
+                displayName: user.displayName, photoURL: user.photoURL, xp: 0,
+                stats: { gamesPlayed: 0, correctAnswers: 0, totalAnswers: 0, totalAnswerTime: 0, themes: {} }
             };
             await setDoc(userRef, defaultData);
             afficherProfil(user, 0);
@@ -69,32 +59,80 @@ onAuthStateChanged(auth, async (user) => {
             afficherProfil(user, userSnap.data().xp);
         }
         
-        document.getElementById('btn-my-stats').style.display = 'block';
         chargerQuestions();
-        chargerLeaderboard();
         mainMenu.style.display = 'block';
     } else {
+        currentUser = null;
         document.getElementById('login-btn').style.display = 'block';
-        document.getElementById('user-info').innerHTML = '';
-        document.getElementById('btn-my-stats').style.display = 'none';
+        document.getElementById('user-info-container').style.display = 'none';
         mainMenu.style.display = 'none';
+        playMenu.style.display = 'none';
+        vsLobby.style.display = 'none';
+        gameZone.style.display = 'none';
     }
 });
 
 document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
 
+// Clic sur l'avatar = Menu de déconnexion
+document.getElementById('user-info').addEventListener('click', () => {
+    const menu = document.getElementById('logout-menu');
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+    signOut(auth).then(() => {
+        document.getElementById('logout-menu').style.display = 'none';
+    });
+});
+
 function afficherProfil(user, totalXp) {
     const lvlInfo = getLevelInfo(totalXp);
     const progressPercent = (lvlInfo.xpInCurrentLevel / lvlInfo.xpNeededForNext) * 100;
+    
     document.getElementById('user-info').innerHTML = `
-        <img src="${user.photoURL}" style="width: 60px; border-radius: 50%; border: 2px solid var(--text-orange); margin-bottom: 10px;">
-        <div style="font-size: 1.2rem; font-weight: bold;">Niveau ${lvlInfo.level}</div>
-        <div style="font-size: 0.9rem; color: #ccc;">${lvlInfo.xpInCurrentLevel} / ${lvlInfo.xpNeededForNext} XP</div>
-        <div style="width: 200px; background: #333; height: 10px; border-radius: 5px; margin: 5px auto;">
-            <div style="width: ${progressPercent}%; background: var(--text-orange); height: 10px; border-radius: 5px;"></div>
+        <div style="text-align: right; line-height: 1.2;">
+            <div style="font-weight: bold; color: var(--text-orange);">${user.displayName}</div>
+            <div style="font-size: 0.8rem; color: #ccc;">Niv ${lvlInfo.level} - ${lvlInfo.xpInCurrentLevel}/${lvlInfo.xpNeededForNext} XP</div>
+            <div style="width: 100px; background: #333; height: 5px; border-radius: 3px; margin-top: 3px; margin-left: auto;">
+                <div style="width: ${progressPercent}%; background: var(--text-orange); height: 5px; border-radius: 3px;"></div>
+            </div>
         </div>
+        <img src="${user.photoURL}" style="width: 40px; border-radius: 50%; border: 2px solid var(--text-orange);">
     `;
+    document.getElementById('user-info-container').style.display = 'block';
 }
+
+// --- NAVIGATION BOUTONS ---
+document.getElementById('btn-menu-jouer').addEventListener('click', () => {
+    mainMenu.style.display = 'none';
+    playMenu.style.display = 'block';
+});
+
+document.getElementById('btn-menu-stats').addEventListener('click', () => afficherModaleStats());
+
+document.getElementById('btn-menu-leaderboard').addEventListener('click', () => {
+    chargerLeaderboard();
+    document.getElementById('leaderboard-modal').style.display = 'flex';
+});
+
+document.getElementById('btn-back-to-main').addEventListener('click', () => {
+    playMenu.style.display = 'none';
+    mainMenu.style.display = 'block';
+});
+
+document.getElementById('btn-vs-menu').addEventListener('click', () => {
+    playMenu.style.display = 'none';
+    vsLobby.style.display = 'block';
+});
+
+document.getElementById('btn-back-to-play').addEventListener('click', () => {
+    vsLobby.style.display = 'none';
+    playMenu.style.display = 'block';
+});
+
+document.getElementById('close-stats').addEventListener('click', () => document.getElementById('stats-modal').style.display = 'none');
+document.getElementById('close-leaderboard').addEventListener('click', () => document.getElementById('leaderboard-modal').style.display = 'none');
 
 // --- LEADERBOARD & MODALES ---
 async function chargerLeaderboard() {
@@ -114,7 +152,10 @@ async function chargerLeaderboard() {
             <span class="leaderboard-name">${data.displayName}</span>
             <span class="leaderboard-xp">${data.xp} XP</span>
         `;
-        li.addEventListener('click', () => afficherModaleStats(data));
+        li.addEventListener('click', () => {
+            document.getElementById('leaderboard-modal').style.display = 'none';
+            afficherModaleStats(data);
+        });
         list.appendChild(li);
         rank++;
     });
@@ -125,7 +166,6 @@ async function afficherModaleStats(userData = null) {
         const docSnap = await getDoc(doc(db, "users", currentUser.uid));
         userData = docSnap.data();
     }
-
     const stats = userData.stats || {};
     const games = stats.gamesPlayed || 0;
     const correct = stats.correctAnswers || 0;
@@ -147,38 +187,21 @@ async function afficherModaleStats(userData = null) {
     document.getElementById('stats-content').innerHTML = `
         <div style="text-align: center;">
             <img src="${userData.photoURL}" style="width: 80px; border-radius: 50%; border: 3px solid var(--text-orange);">
-            <h2 style="color: var(--text-orange);">${userData.displayName}</h2>
+            <h2 style="color: var(--text-orange); margin-bottom: 5px;">${userData.displayName}</h2>
             <p><strong>Parties jouées :</strong> ${games}</p>
             <p><strong>Bonnes réponses :</strong> ${winRate}%</p>
             <p><strong>Vitesse moyenne :</strong> ${avgSpeed}s / réponse</p>
             ${themesHTML}
         </div>
     `;
-    
     document.getElementById('stats-modal').style.display = 'flex';
 }
 
-document.getElementById('btn-my-stats').addEventListener('click', () => afficherModaleStats());
-document.getElementById('close-stats').addEventListener('click', () => {
-    document.getElementById('stats-modal').style.display = 'none';
-});
-
-// --- CHARGEMENT QUESTIONS ---
 async function chargerQuestions() {
     const querySnapshot = await getDocs(collection(db, "questions"));
     allQuestions = [];
     querySnapshot.forEach((doc) => allQuestions.push(doc.data()));
 }
-
-// --- NAVIGATION BASIQUE DES MENUS ---
-document.getElementById('btn-vs-menu').addEventListener('click', () => {
-    mainMenu.style.display = 'none';
-    document.getElementById('vs-lobby').style.display = 'block';
-});
-document.getElementById('btn-back-menu').addEventListener('click', () => {
-    document.getElementById('vs-lobby').style.display = 'none';
-    mainMenu.style.display = 'block';
-});
 
 // --- CORRECTEUR ORTHOGRAPHIQUE ---
 function nettoyerTexte(str) {
@@ -187,23 +210,18 @@ function nettoyerTexte(str) {
     s = s.replace(/^(le |la |les |l'|l |un |une |des )/, "");
     return s.trim();
 }
-
 function levenshteinDistance(a, b) {
     const matrix = [];
     for (let i = 0; i <= b.length; i++) { matrix[i] = [i]; }
     for (let j = 0; j <= a.length; j++) { matrix[0][j] = j; }
     for (let i = 1; i <= b.length; i++) {
         for (let j = 1; j <= a.length; j++) {
-            if (b.charAt(i - 1) === a.charAt(j - 1)) {
-                matrix[i][j] = matrix[i - 1][j - 1];
-            } else {
-                matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
-            }
+            if (b.charAt(i - 1) === a.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
+            else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
         }
     }
     return matrix[b.length][a.length];
 }
-
 function verifierReponse(input, correct) {
     const userNorm = nettoyerTexte(input);
     const correctNorm = nettoyerTexte(correct);
@@ -211,46 +229,32 @@ function verifierReponse(input, correct) {
     const distance = levenshteinDistance(userNorm, correctNorm);
     const maxLength = Math.max(userNorm.length, correctNorm.length);
     if (maxLength === 0) return false;
-    const pourcentageRessemblance = (maxLength - distance) / maxLength;
-    return pourcentageRessemblance >= 0.85 || distance <= 1;
+    return ((maxLength - distance) / maxLength) >= 0.85 || distance <= 1;
 }
 
 // --- MOTEUR DE JEU SOLO ---
-btnSolo.addEventListener('click', () => {
-    if (allQuestions.length < 10) return alert("Pas assez de questions dans la base !");
-    
-    const shuffled = allQuestions.sort(() => 0.5 - Math.random());
-    gameQuestions = shuffled.slice(0, 10);
-    
-    score = 0;
-    currentQIndex = 0;
-    mainMenu.style.display = 'none';
+document.getElementById('btn-solo').addEventListener('click', () => {
+    if (allQuestions.length < 10) return alert("Pas assez de questions !");
+    gameQuestions = allQuestions.sort(() => 0.5 - Math.random()).slice(0, 10);
+    score = 0; currentQIndex = 0;
+    playMenu.style.display = 'none';
     gameZone.style.display = 'block';
-    
     afficherQuestion();
 });
 
 function afficherQuestion() {
     clearInterval(timerInterval);
     const q = gameQuestions[currentQIndex];
-    
     document.getElementById('question-counter').innerText = `Question ${currentQIndex + 1}/10`;
     document.getElementById('question-theme').innerText = q.theme;
     document.getElementById('question-text').innerText = q.question;
     
     const imgEl = document.getElementById('question-img');
-    if (imgEl && q.imageUrl && q.imageUrl !== "") {
-        imgEl.src = q.imageUrl;
-        imgEl.style.display = 'block';
-    } else if (imgEl) {
-        imgEl.style.display = 'none';
-    }
+    if (imgEl && q.imageUrl && q.imageUrl !== "") { imgEl.src = q.imageUrl; imgEl.style.display = 'block'; } 
+    else if (imgEl) { imgEl.style.display = 'none'; }
 
     const input = document.getElementById('answer-input');
-    input.value = '';
-    input.disabled = false;
-    input.focus();
-    
+    input.value = ''; input.disabled = false; input.focus();
     document.getElementById('feedback-msg').innerText = '';
     document.getElementById('submit-answer').style.display = 'inline-block';
     
@@ -272,28 +276,17 @@ function traiterReponse(userAnswer) {
     
     const input = document.getElementById('answer-input');
     const feedback = document.getElementById('feedback-msg');
-    
     input.disabled = true;
     document.getElementById('submit-answer').style.display = 'none';
 
-    if (isCorrect) {
-        score++;
-        feedback.innerText = "✅ Bonne réponse !";
-        feedback.style.color = "#4CAF50";
-    } else {
-        feedback.innerText = `❌ Faux ! La réponse était : ${q.answer}`;
-        feedback.style.color = "#F44336";
-    }
+    if (isCorrect) { score++; feedback.innerText = "✅ Bonne réponse !"; feedback.style.color = "#4CAF50"; } 
+    else { feedback.innerText = `❌ Faux ! La réponse était : ${q.answer}`; feedback.style.color = "#F44336"; }
 
     setTimeout(passerQuestionSuivante, 2500);
 }
 
-document.getElementById('submit-answer').addEventListener('click', () => {
-    traiterReponse(document.getElementById('answer-input').value);
-});
-document.getElementById('answer-input').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') traiterReponse(document.getElementById('answer-input').value);
-});
+document.getElementById('submit-answer').addEventListener('click', () => traiterReponse(document.getElementById('answer-input').value));
+document.getElementById('answer-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') traiterReponse(document.getElementById('answer-input').value); });
 
 async function passerQuestionSuivante() {
     currentQIndex++;
@@ -301,8 +294,8 @@ async function passerQuestionSuivante() {
         afficherQuestion();
     } else {
         gameZone.style.display = 'none';
-        mainMenu.style.display = 'block';
         
+        // Maj de l'XP
         if (score > 0) {
             const userRef = doc(db, "users", currentUser.uid);
             const userSnap = await getDoc(userRef);
@@ -311,6 +304,19 @@ async function passerQuestionSuivante() {
             afficherProfil(currentUser, newXp);
         }
         
-        alert(`Partie terminée ! Score : ${score}/10. Tu as gagné ${score} XP.`);
+        // Affichage Ecran de fin
+        document.getElementById('end-score').innerText = `${score}/10`;
+        document.getElementById('end-xp').innerText = `+${score} XP`;
+        document.getElementById('end-game-modal').style.display = 'flex';
     }
 }
+
+// Boutons écran de fin
+document.getElementById('btn-replay').addEventListener('click', () => {
+    document.getElementById('end-game-modal').style.display = 'none';
+    document.getElementById('btn-solo').click(); // Relance une partie
+});
+document.getElementById('btn-end-to-menu').addEventListener('click', () => {
+    document.getElementById('end-game-modal').style.display = 'none';
+    mainMenu.style.display = 'block';
+});
