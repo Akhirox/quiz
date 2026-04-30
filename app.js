@@ -16,8 +16,18 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
+// --- VARIABLES GLOBALES ET ÉLÉMENTS DOM ---
 let currentUser = null;
 let allQuestions = []; 
+let gameQuestions = []; 
+let currentQIndex = 0;
+let score = 0;
+let timerInterval;
+let timeLeft = 14;
+
+const btnSolo = document.getElementById('btn-solo');
+const mainMenu = document.getElementById('main-menu');
+const gameZone = document.getElementById('game-zone');
 
 // --- GESTION DU PROFIL ET STATISTIQUES ---
 function getLevelInfo(totalXp) {
@@ -41,7 +51,6 @@ onAuthStateChanged(auth, async (user) => {
         const userSnap = await getDoc(userRef);
 
         if (!userSnap.exists()) {
-            // Création du profil avec la structure de Stats vierge
             const defaultData = { 
                 displayName: user.displayName, 
                 photoURL: user.photoURL, 
@@ -63,12 +72,12 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('btn-my-stats').style.display = 'block';
         chargerQuestions();
         chargerLeaderboard();
-        document.getElementById('main-menu').style.display = 'block';
+        mainMenu.style.display = 'block';
     } else {
         document.getElementById('login-btn').style.display = 'block';
         document.getElementById('user-info').innerHTML = '';
         document.getElementById('btn-my-stats').style.display = 'none';
-        document.getElementById('main-menu').style.display = 'none';
+        mainMenu.style.display = 'none';
     }
 });
 
@@ -105,16 +114,13 @@ async function chargerLeaderboard() {
             <span class="leaderboard-name">${data.displayName}</span>
             <span class="leaderboard-xp">${data.xp} XP</span>
         `;
-        // Clic sur un joueur = Ouverture de ses stats
         li.addEventListener('click', () => afficherModaleStats(data));
         list.appendChild(li);
         rank++;
     });
 }
 
-// Fonction pour afficher la fenêtre de statistiques
 async function afficherModaleStats(userData = null) {
-    // Si aucun joueur n'est précisé, on affiche les stats du joueur connecté
     if (!userData) {
         const docSnap = await getDoc(doc(db, "users", currentUser.uid));
         userData = docSnap.data();
@@ -166,19 +172,53 @@ async function chargerQuestions() {
 
 // --- NAVIGATION BASIQUE DES MENUS ---
 document.getElementById('btn-vs-menu').addEventListener('click', () => {
-    document.getElementById('main-menu').style.display = 'none';
+    mainMenu.style.display = 'none';
     document.getElementById('vs-lobby').style.display = 'block';
 });
 document.getElementById('btn-back-menu').addEventListener('click', () => {
     document.getElementById('vs-lobby').style.display = 'none';
-    document.getElementById('main-menu').style.display = 'block';
+    mainMenu.style.display = 'block';
 });
+
+// --- CORRECTEUR ORTHOGRAPHIQUE ---
+function nettoyerTexte(str) {
+    let s = str.trim().toLowerCase();
+    s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    s = s.replace(/^(le |la |les |l'|l |un |une |des )/, "");
+    return s.trim();
+}
+
+function levenshteinDistance(a, b) {
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) { matrix[i] = [i]; }
+    for (let j = 0; j <= a.length; j++) { matrix[0][j] = j; }
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+}
+
+function verifierReponse(input, correct) {
+    const userNorm = nettoyerTexte(input);
+    const correctNorm = nettoyerTexte(correct);
+    if (userNorm === correctNorm) return true;
+    const distance = levenshteinDistance(userNorm, correctNorm);
+    const maxLength = Math.max(userNorm.length, correctNorm.length);
+    if (maxLength === 0) return false;
+    const pourcentageRessemblance = (maxLength - distance) / maxLength;
+    return pourcentageRessemblance >= 0.85 || distance <= 1;
+}
 
 // --- MOTEUR DE JEU SOLO ---
 btnSolo.addEventListener('click', () => {
     if (allQuestions.length < 10) return alert("Pas assez de questions dans la base !");
     
-    // Mélange et sélectionne 10 questions
     const shuffled = allQuestions.sort(() => 0.5 - Math.random());
     gameQuestions = shuffled.slice(0, 10);
     
@@ -199,10 +239,10 @@ function afficherQuestion() {
     document.getElementById('question-text').innerText = q.question;
     
     const imgEl = document.getElementById('question-img');
-    if (q.imageUrl && q.imageUrl !== "") {
+    if (imgEl && q.imageUrl && q.imageUrl !== "") {
         imgEl.src = q.imageUrl;
         imgEl.style.display = 'block';
-    } else {
+    } else if (imgEl) {
         imgEl.style.display = 'none';
     }
 
@@ -221,7 +261,7 @@ function afficherQuestion() {
     timerInterval = setInterval(() => {
         timeLeft--;
         document.getElementById('timer').innerText = timeLeft;
-        if (timeLeft <= 0) traiterReponse(""); // Temps écoulé
+        if (timeLeft <= 0) traiterReponse(""); 
     }, 1000);
 }
 
@@ -245,10 +285,9 @@ function traiterReponse(userAnswer) {
         feedback.style.color = "#F44336";
     }
 
-    setTimeout(passerQuestionSuivante, 2500); // Attend 2.5s avant la suite
+    setTimeout(passerQuestionSuivante, 2500);
 }
 
-// Validation au clic ou avec la touche Entrée
 document.getElementById('submit-answer').addEventListener('click', () => {
     traiterReponse(document.getElementById('answer-input').value);
 });
@@ -261,7 +300,6 @@ async function passerQuestionSuivante() {
     if (currentQIndex < 10) {
         afficherQuestion();
     } else {
-        // FIN DE PARTIE
         gameZone.style.display = 'none';
         mainMenu.style.display = 'block';
         
@@ -270,8 +308,6 @@ async function passerQuestionSuivante() {
             const userSnap = await getDoc(userRef);
             const newXp = userSnap.data().xp + score;
             await updateDoc(userRef, { xp: newXp });
-            
-            // On met à jour l'affichage du profil avec la nouvelle barre de progression !
             afficherProfil(currentUser, newXp);
         }
         
