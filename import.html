@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>CHBK - Admin Import</title>
+    <style>
+        body { background: #121212; color: #FF8C00; font-family: sans-serif; text-align: center; padding: 50px; }
+        textarea { width: 80%; height: 300px; background: #222; color: white; border: 2px solid #FF8C00; border-radius: 8px; padding: 10px; font-family: monospace; }
+        button { margin-top: 20px; padding: 15px 30px; font-size: 1.2rem; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #45a049; }
+    </style>
+</head>
+<body>
+    <h1>🛠️ Back-Office : Mise à jour de la BDD</h1>
+    <p>Colle ton JSON ici. Le script va <strong>vider</strong> l'ancienne base et <strong>injecter</strong> la nouvelle automatiquement.</p>
+    
+    <textarea id="json-input" placeholder="Colle le code JSON généré par Google Sheets ici..."></textarea><br>
+    <button id="btn-import">Vider et Mettre à jour la BDD</button>
+    <h3 id="status"></h3>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA3Kphg2UvYRLMWY2qQ86J6RsIkG639Dew",
+            authDomain: "quiz-chbk.firebaseapp.com",
+            projectId: "quiz-chbk",
+            storageBucket: "quiz-chbk.firebasestorage.app",
+            messagingSenderId: "66746389127",
+            appId: "1:66746389127:web:b2ccefa1f6cb223de65e22"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        document.getElementById('btn-import').addEventListener('click', async () => {
+            const mdp = prompt("Mot de passe Admin :");
+            if (mdp !== "admin") {
+                alert("Mauvais mot de passe !");
+                return;
+            }
+
+            const jsonText = document.getElementById('json-input').value;
+            const statusText = document.getElementById('status');
+            
+            try {
+                const data = JSON.parse(jsonText);
+                if (!Array.isArray(data)) throw new Error("Le format n'est pas un tableau valide.");
+                
+                statusText.innerText = "⏳ 1/2 : Nettoyage de l'ancienne base de données en cours...";
+                statusText.style.color = "yellow";
+
+                const querySnapshot = await getDocs(collection(db, "questions"));
+                const deletePromises = [];
+                
+                querySnapshot.forEach((document) => {
+                    deletePromises.push(deleteDoc(doc(db, "questions", document.id)));
+                });
+                
+                await Promise.all(deletePromises);
+
+                statusText.innerText = "⏳ 2/2 : Injection des nouvelles questions...";
+
+                let count = 0;
+                for (const q of data) {
+                    await addDoc(collection(db, "questions"), q);
+                    count++;
+                }
+
+                statusText.innerText = `✅ SUCCÈS ! L'ancienne base a été détruite et ${count} nouvelles questions ont été ajoutées.`;
+                statusText.style.color = "#4CAF50";
+                document.getElementById('json-input').value = ""; 
+            } catch (error) {
+                statusText.innerText = `❌ ERREUR : ${error.message}`;
+                statusText.style.color = "#F44336";
+            }
+        });
+    </script>
+</body>
+</html>
