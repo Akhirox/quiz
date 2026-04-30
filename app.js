@@ -31,14 +31,13 @@ let attemptsLeft = 3;
 let isProcessingQuestion = false;
 let gameStatsTracker = { correct: 0, totalTime: 0, themes: {} };
 
-// Variables Multi
 let peer = null;
 let peerConn = null; 
 let peerConnections = []; 
 let isHost = false;
 let isMultiplayer = false;
 let lobbyPlayers = []; 
-let multiGameState = {}; // État de tous les joueurs pour la question en cours
+let multiGameState = {}; 
 
 const mainMenu = document.getElementById('main-menu');
 const playMenu = document.getElementById('play-menu');
@@ -211,7 +210,6 @@ function rejoindreOuCreerSalle(roomID) {
                     lobbyPlayers.push({ uid: data.uid, name: data.name, connId: conn.peer });
                     majLobbyUI(); diffuserLobby();
                 } else if (data.type === 'PLAYER_UPDATE') {
-                    // L'hôte reçoit une réponse d'un invité
                     gererMajJoueur(data);
                 }
             });
@@ -230,13 +228,22 @@ function rejoindreOuCreerSalle(roomID) {
                 isHost = false; isMultiplayer = true;
                 peerConn = peer.connect(roomID);
                 peerConn.on('open', () => { peerConn.send({ type: 'PLAYER_INFO', uid: currentUser.uid, name: currentUser.displayName }); });
+                
                 peerConn.on('data', (data) => {
                     if (data.type === 'LOBBY_UPDATE') { lobbyPlayers = data.players; majLobbyUI(); } 
                     else if (data.type === 'LOBBY_FULL') { alert("Salle pleine !"); document.getElementById('btn-back-to-play').click(); } 
                     else if (data.type === 'START_GAME') { gameQuestions = data.questions; initMultiGameState(); lancerCompteARebours(); }
                     else if (data.type === 'SYNC_SCOREBOARD') { multiGameState = data.state; updateScoreboardUI(); }
                     else if (data.type === 'END_QUESTION') { multiGameState = data.state; afficherRecapMulti(data.correctAnswer); }
-                    else if (data.type === 'NEXT_QUESTION') { currentQIndex++; afficherQuestion(); }
+                    else if (data.type === 'NEXT_QUESTION') { 
+                        document.getElementById('recap-overlay').style.display = 'none';
+                        currentQIndex++; 
+                        lancerCompteARebours("Question suivante...", 2); 
+                    }
+                    else if (data.type === 'END_GAME') {
+                        document.getElementById('recap-overlay').style.display = 'none';
+                        finDePartieLogic();
+                    }
                 });
             });
         }
@@ -266,30 +273,27 @@ document.getElementById('btn-start-vs').addEventListener('click', () => {
 
 function initMultiGameState() {
     multiGameState = {};
-    lobbyPlayers.forEach(p => {
-        multiGameState[p.uid] = { name: p.name, score: 0, status: 'playing', lives: 3, lastAnswer: '', pointsGained: 0 };
-    });
+    lobbyPlayers.forEach(p => { multiGameState[p.uid] = { name: p.name, score: 0, status: 'playing', lives: 3, lastAnswer: '', pointsGained: 0 }; });
 }
 
-// --- MOTEUR DE JEU (SOLO & MULTI) ---
+// --- MOTEUR DE JEU ---
 document.getElementById('btn-solo').addEventListener('click', () => {
     if (allQuestions.length < 10) return alert("Pas assez de questions !");
     gameQuestions = allQuestions.sort(() => 0.5 - Math.random()).slice(0, 10);
-    isMultiplayer = false;
-    score = 0; currentQIndex = 0;
+    isMultiplayer = false; score = 0; currentQIndex = 0;
     gameStatsTracker = { correct: 0, totalTime: 0, themes: {} }; 
     lancerCompteARebours();
 });
 
 function lancerCompteARebours(texte = "Préparez-vous...", duree = 3) {
-    playMenu.style.display = 'none'; vsLobby.style.display = 'none'; gameZone.style.display = 'block';
+    playMenu.style.display = 'none'; vsLobby.style.display = 'none'; 
+    gameZone.style.display = 'flex'; // On affiche la grille flexbox
     
-    // Gère l'affichage du scoreboard Multi
-    if (isMultiplayer) {
-        document.getElementById('multiplayer-board').style.display = 'block';
-        updateScoreboardUI();
-    } else {
-        document.getElementById('multiplayer-board').style.display = 'none';
+    if (isMultiplayer) { 
+        document.getElementById('multiplayer-board').style.display = 'block'; 
+        updateScoreboardUI(); 
+    } else { 
+        document.getElementById('multiplayer-board').style.display = 'none'; 
     }
 
     const overlay = document.getElementById('countdown-overlay');
@@ -306,38 +310,33 @@ function lancerCompteARebours(texte = "Préparez-vous...", duree = 3) {
 }
 
 function updateScoreboardUI() {
-    const list = document.getElementById('multiplayer-list');
-    list.innerHTML = '';
-    // Trie par score décroissant
+    const list = document.getElementById('multiplayer-list'); list.innerHTML = '';
     const players = Object.values(multiGameState).sort((a, b) => b.score - a.score);
-    
     players.forEach(p => {
-        let statusIcon = '';
-        if (p.status === 'correct') statusIcon = '✅';
+        let statusIcon = '⏳';
+        if (p.status === 'correct') statusIcon = '✅'; 
         else if (p.status === 'out') statusIcon = '❌';
         
         let livesStr = '❤️'.repeat(p.lives);
+        if (p.lives === 0) livesStr = '💔';
         
-        const div = document.createElement('div');
-        div.className = 'player-live-card';
-        div.innerHTML = `<span>${p.name} : ${p.score} pts</span> <span style="font-size: 0.8rem;">${livesStr}</span> <span>${statusIcon}</span>`;
+        const div = document.createElement('div'); div.className = 'player-live-card';
+        div.innerHTML = `
+            <div style="flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}</div>
+            <div style="font-size: 0.8rem; margin-right: 10px;">${livesStr}</div>
+            <div style="font-weight: bold; margin-right: 10px; color: var(--text-orange);">${p.score} pts</div>
+            <div>${statusIcon}</div>
+        `;
         list.appendChild(div);
     });
 }
 
 function afficherQuestion() {
     clearInterval(timerInterval);
-    isProcessingQuestion = false;
-    attemptsLeft = 3;
+    isProcessingQuestion = false; attemptsLeft = 3;
     
-    // Reset status Multi
     if (isMultiplayer) {
-        for (let uid in multiGameState) {
-            multiGameState[uid].status = 'playing';
-            multiGameState[uid].lives = 3;
-            multiGameState[uid].lastAnswer = '';
-            multiGameState[uid].pointsGained = 0;
-        }
+        for (let uid in multiGameState) { multiGameState[uid].status = 'playing'; multiGameState[uid].lives = 3; multiGameState[uid].lastAnswer = ''; multiGameState[uid].pointsGained = 0; }
         updateScoreboardUI();
     }
     
@@ -347,8 +346,7 @@ function afficherQuestion() {
     document.getElementById('question-text').innerText = q.question;
     
     const imgEl = document.getElementById('question-img');
-    if (imgEl && q.imageUrl && q.imageUrl !== "") { imgEl.src = q.imageUrl; imgEl.style.display = 'block'; } 
-    else if (imgEl) { imgEl.style.display = 'none'; }
+    if (imgEl && q.imageUrl && q.imageUrl !== "") { imgEl.src = q.imageUrl; imgEl.style.display = 'block'; } else if (imgEl) { imgEl.style.display = 'none'; }
 
     const input = document.getElementById('answer-input');
     input.value = ''; input.disabled = false; input.focus();
@@ -361,15 +359,11 @@ function afficherQuestion() {
     setTimeout(() => { tBar.style.transition = 'width 1s linear, background-color 1s linear'; }, 50);
 
     timeLeft = 14;
-    document.getElementById('timer-text').innerText = timeLeft;
-    document.getElementById('timer-text').style.color = '#4CAF50';
+    document.getElementById('timer-text').innerText = timeLeft; document.getElementById('timer-text').style.color = '#4CAF50';
     
-    // Seul l'hôte gère la vraie fin de chrono en multi pour éviter les désync
     timerInterval = setInterval(() => {
-        timeLeft--;
-        document.getElementById('timer-text').innerText = timeLeft;
-        const percentage = (timeLeft / 14) * 100;
-        tBar.style.width = `${percentage}%`;
+        timeLeft--; document.getElementById('timer-text').innerText = timeLeft;
+        const percentage = (timeLeft / 14) * 100; tBar.style.width = `${percentage}%`;
         
         if (percentage > 50) { tBar.style.backgroundColor = '#4CAF50'; document.getElementById('timer-text').style.color = '#4CAF50'; } 
         else if (percentage > 25) { tBar.style.backgroundColor = '#FF9800'; document.getElementById('timer-text').style.color = '#FF9800'; } 
@@ -377,8 +371,8 @@ function afficherQuestion() {
 
         if (timeLeft <= 0) {
             clearInterval(timerInterval);
-            if (!isMultiplayer) traiterReponse(""); // Solo: force fin
-            else if (isHost) checkFinDeQuestionMulti(); // Multi: Hôte force fin
+            if (!isMultiplayer) traiterReponse(""); 
+            else if (isHost) checkFinDeQuestionMulti(); 
         }
     }, 1000);
 }
@@ -389,14 +383,11 @@ function traiterReponse(userAnswer) {
     const isCorrect = verifierReponse(userAnswer, q.answer);
     const input = document.getElementById('answer-input');
     
-    // --- MODE SOLO ---
     if (!isMultiplayer) {
         if (!gameStatsTracker.themes[q.theme]) gameStatsTracker.themes[q.theme] = { correct: 0, total: 0 };
-
         if (isCorrect) {
             isProcessingQuestion = true; clearInterval(timerInterval);
-            score += timeLeft; // Gain basique en solo
-            audioCorrect.play(); 
+            score += timeLeft; audioCorrect.play(); 
             gameStatsTracker.correct++; gameStatsTracker.totalTime += (14 - timeLeft); gameStatsTracker.themes[q.theme].correct++; gameStatsTracker.themes[q.theme].total++;
             input.disabled = true; document.getElementById('submit-answer').style.display = 'none';
             document.getElementById('feedback-msg').innerText = "✅ Bonne réponse !"; document.getElementById('feedback-msg').style.color = "#4CAF50"; 
@@ -419,25 +410,20 @@ function traiterReponse(userAnswer) {
                 setTimeout(passerQuestionSuivante, 2500);
             }
         }
-    } 
-    // --- MODE MULTIJOUEUR ---
-    else {
+    } else {
         if (isCorrect) {
             isProcessingQuestion = true;
             input.disabled = true; document.getElementById('submit-answer').style.display = 'none';
             document.getElementById('feedback-msg').innerText = "✅ En attente des autres..."; document.getElementById('feedback-msg').style.color = "#4CAF50";
-            audioCorrect.play();
-            envoyerStatutHost('correct', attemptsLeft, userAnswer, timeLeft);
+            audioCorrect.play(); envoyerStatutHost('correct', attemptsLeft, userAnswer, timeLeft);
         } else {
             attemptsLeft--; audioWrong.play();
             if (attemptsLeft > 0) {
                 document.getElementById('hearts-display').innerText = '❤️'.repeat(attemptsLeft);
                 document.getElementById('feedback-msg').innerText = `❌ Faux ! Encore une chance...`; document.getElementById('feedback-msg').style.color = "#FF8C00";
-                input.value = ''; input.focus();
-                envoyerStatutHost('playing', attemptsLeft, userAnswer, timeLeft);
+                input.value = ''; input.focus(); envoyerStatutHost('playing', attemptsLeft, userAnswer, timeLeft);
             } else {
-                isProcessingQuestion = true;
-                document.getElementById('hearts-display').innerText = '💔';
+                isProcessingQuestion = true; document.getElementById('hearts-display').innerText = '💔';
                 input.disabled = true; document.getElementById('submit-answer').style.display = 'none';
                 document.getElementById('feedback-msg').innerText = "❌ Dommage ! En attente des autres..."; document.getElementById('feedback-msg').style.color = "#F44336";
                 envoyerStatutHost('out', 0, userAnswer, timeLeft);
@@ -449,11 +435,9 @@ function traiterReponse(userAnswer) {
 document.getElementById('submit-answer').addEventListener('click', () => traiterReponse(document.getElementById('answer-input').value));
 document.getElementById('answer-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') traiterReponse(document.getElementById('answer-input').value); });
 
-// --- L'HÔTE GÈRE LA SYNCHRONISATION MULTI ---
 function envoyerStatutHost(status, lives, answer, tLeft) {
     const data = { type: 'PLAYER_UPDATE', uid: currentUser.uid, status, lives, answer, timeLeft: tLeft };
-    if (isHost) gererMajJoueur(data); // L'hôte se gère lui-même
-    else peerConn.send(data); // L'invité envoie à l'hôte
+    if (isHost) gererMajJoueur(data); else peerConn.send(data);
 }
 
 function gererMajJoueur(data) {
@@ -461,31 +445,19 @@ function gererMajJoueur(data) {
     const p = multiGameState[data.uid];
     p.status = data.status; p.lives = data.lives; p.lastAnswer = data.answer;
     if (data.status === 'correct') p.timeLeftWhenCorrect = data.timeLeft;
-    
-    // Broadcast le scoreboard mis à jour
-    updateScoreboardUI();
-    peerConnections.forEach(conn => conn.send({ type: 'SYNC_SCOREBOARD', state: multiGameState }));
-    
+    updateScoreboardUI(); peerConnections.forEach(conn => conn.send({ type: 'SYNC_SCOREBOARD', state: multiGameState }));
     checkFinDeQuestionMulti();
 }
 
 function checkFinDeQuestionMulti() {
     if (!isHost) return;
     let toutLeMondeFini = true;
-    for (let uid in multiGameState) {
-        if (multiGameState[uid].status === 'playing') toutLeMondeFini = false;
-    }
+    for (let uid in multiGameState) { if (multiGameState[uid].status === 'playing') toutLeMondeFini = false; }
     
-    // Si tout le monde a répondu ou temps écoulé
     if (toutLeMondeFini || timeLeft <= 0) {
         clearInterval(timerInterval);
-        
-        // Calcul des points (Temps restant + Bonus Rapidité)
         let correctPlayers = [];
-        for (let uid in multiGameState) {
-            if (multiGameState[uid].status === 'correct') correctPlayers.push(multiGameState[uid]);
-        }
-        // Tri par temps restant (le plus grand en premier)
+        for (let uid in multiGameState) { if (multiGameState[uid].status === 'correct') correctPlayers.push(multiGameState[uid]); }
         correctPlayers.sort((a, b) => b.timeLeftWhenCorrect - a.timeLeftWhenCorrect);
         
         const totalP = Object.keys(multiGameState).length;
@@ -496,37 +468,41 @@ function checkFinDeQuestionMulti() {
         });
 
         const correctAns = gameQuestions[currentQIndex].answer.split('/')[0].trim();
-        
-        // Affiche pour l'Hôte et diffuse aux Invités
         afficherRecapMulti(correctAns);
         peerConnections.forEach(conn => conn.send({ type: 'END_QUESTION', state: multiGameState, correctAnswer: correctAns }));
     }
 }
 
-// Affiche l'écran de récapitulatif pour tous (5 secondes)
 function afficherRecapMulti(correctAnswer) {
-    clearInterval(timerInterval); // Sécurité
-    updateScoreboardUI(); // Maj finale des scores
+    clearInterval(timerInterval); updateScoreboardUI(); 
     
     const overlay = document.getElementById('recap-overlay');
-    document.getElementById('recap-correct-answer').innerText = `Réponse : ${correctAnswer}`;
+    document.getElementById('recap-correct-answer').innerText = correctAnswer;
     
-    const list = document.getElementById('recap-list');
-    list.innerHTML = '';
+    const list = document.getElementById('recap-list'); list.innerHTML = '';
     
-    for (let uid in multiGameState) {
-        const p = multiGameState[uid];
-        const li = document.createElement('li');
-        li.className = 'recap-item';
-        let ptsText = p.status === 'correct' ? `<span style="color:#4CAF50;">+${p.pointsGained} pts</span>` : `<span style="color:#F44336;">0 pts</span>`;
+    // Trie pour le tableau final (Meilleurs points en haut)
+    const sortedPlayers = Object.values(multiGameState).sort((a, b) => b.pointsGained - a.pointsGained);
+    
+    sortedPlayers.forEach(p => {
+        const tr = document.createElement('tr');
+        const isCorrect = p.status === 'correct';
+        tr.className = `recap-item-row ${isCorrect ? 'correct' : 'wrong'}`;
+        
+        let ptsText = isCorrect ? `+${p.pointsGained} pts` : `0 pts`;
         let ansText = p.lastAnswer ? `"${p.lastAnswer}"` : `<em>Temps écoulé</em>`;
-        li.innerHTML = `<span><strong>${p.name}</strong> : ${ansText}</span> ${ptsText}`;
-        list.appendChild(li);
-    }
+        let icon = isCorrect ? '✅' : '❌';
+        
+        tr.innerHTML = `
+            <td>${icon} <strong>${p.name}</strong></td>
+            <td>${ansText}</td>
+            <td style="font-weight: bold; color: ${isCorrect ? '#4CAF50' : '#F44336'}; text-align: right;">${ptsText}</td>
+        `;
+        list.appendChild(tr);
+    });
     
     overlay.style.display = 'flex';
     
-    // L'hôte déclenche la suite après 5s
     if (isHost) {
         setTimeout(() => {
             overlay.style.display = 'none';
@@ -535,23 +511,16 @@ function afficherRecapMulti(correctAnswer) {
                 peerConnections.forEach(conn => conn.send({ type: 'NEXT_QUESTION' }));
                 lancerCompteARebours("Question suivante...", 2);
             } else {
-                finDePartieLogic(); // Score final
+                peerConnections.forEach(conn => conn.send({ type: 'END_GAME' }));
+                finDePartieLogic(); 
             }
         }, 5000);
-    } else {
-        // L'invité cache juste la modale après 5s et attend l'ordre de l'Hôte
-        setTimeout(() => { overlay.style.display = 'none'; }, 5000);
     }
 }
 
-// --- FIN DE PARTIE ---
 async function passerQuestionSuivante() {
     currentQIndex++;
-    if (currentQIndex < 10) {
-        afficherQuestion();
-    } else {
-        finDePartieLogic();
-    }
+    if (currentQIndex < 10) afficherQuestion(); else finDePartieLogic();
 }
 
 async function finDePartieLogic() {
@@ -560,12 +529,9 @@ async function finDePartieLogic() {
     const userSnap = await getDoc(userRef);
     const userData = userSnap.data();
     
-    // En Multi, on prend le score du tableau, en solo le score local
     let finalScore = isMultiplayer ? multiGameState[currentUser.uid].score : score;
-    
     const newXp = userData.xp + finalScore;
     
-    // Mise à jour de l'XP sans toucher aux stats avancées pour éviter un bug temporaire
     await updateDoc(userRef, { xp: newXp });
     afficherProfil(currentUser, newXp);
     
