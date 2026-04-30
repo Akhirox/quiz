@@ -9,22 +9,35 @@
 <body>
     <h1 class="title-glow">CHBK FUN</h1>
     
-    <div id="auth-section" style="text-align: center; margin-top: 2rem;">
-        <button id="login-btn" style="padding: 10px 20px; font-size: 1.2rem; cursor: pointer; background: var(--text-orange); color: var(--bg-dark); border: none; border-radius: 5px; font-weight: bold;">
-            Connexion avec Google
-        </button>
-        <div id="user-info" style="margin-top: 20px;"></div>
+    <!-- Zone de connexion et profil -->
+    <div id="auth-section" style="text-align: center; margin-top: 1rem;">
+        <button id="login-btn" class="orange-btn">Connexion avec Google</button>
+        <div id="user-info"></div>
     </div>
-<!-- ZONE ADMIN TEMPORAIRE (À supprimer plus tard) -->
-    <div id="admin-panel" style="margin-top: 50px; border: 2px dashed #FF8C00; padding: 20px; border-radius: 10px; width: 80%; max-width: 600px; text-align: center;">
-        <h3 style="margin-top: 0;">🛠️ Zone d'importation des questions</h3>
-        <textarea id="json-input" style="width: 100%; height: 100px; margin-bottom: 10px; background: #222; color: white; border: 1px solid #555;" placeholder="Colle tout le contenu de ton bloc-notes ici..."></textarea>
-        <button id="import-btn" style="padding: 10px 20px; font-size: 1rem; cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 5px; font-weight: bold;">
-            Injecter dans la BDD !
-        </button>
-        <p id="import-status" style="margin-top: 10px; font-weight: bold;"></p>
+
+    <!-- Menu Principal (Caché tant qu'on n'est pas connecté) -->
+    <div id="main-menu" style="display: none; text-align: center; margin-top: 2rem;">
+        <button id="btn-solo" class="orange-btn game-btn">Lancer Mode Solo (10 Q)</button>
+        <button id="btn-vs" class="orange-btn game-btn" style="opacity: 0.5; cursor: not-allowed;">Mode VS (Bientôt)</button>
     </div>
-    <!-- type="module" est indispensable pour les imports Firebase -->
+
+    <!-- Zone de Jeu (Cachée par défaut) -->
+    <div id="game-zone" style="display: none; text-align: center; margin-top: 2rem; width: 90%; max-width: 600px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span id="question-counter" style="font-size: 1.2rem; font-weight: bold;">Question 1/10</span>
+            <span id="timer" style="font-size: 2rem; font-weight: bold; color: #ff3333;">14</span>
+        </div>
+        
+        <h3 id="question-theme" style="color: #ccc; text-transform: uppercase; font-size: 0.9rem;">Thème</h3>
+        <p id="question-text" style="font-size: 1.5rem; margin: 20px 0; min-height: 80px;">Chargement...</p>
+        <img id="question-img" src="" alt="Image de la question" style="display: none; max-width: 100%; max-height: 200px; border-radius: 8px; margin: 0 auto 20px auto;">
+        
+        <input type="text" id="answer-input" placeholder="Écris ta réponse ici..." autocomplete="off">
+        <button id="submit-answer" class="orange-btn">Valider</button>
+        
+        <p id="feedback-msg" style="font-size: 1.2rem; font-weight: bold; height: 30px; margin-top: 15px;"></p>
+    </div>
+
     <script type="module" src="app.js"></script>
 </body>
 </html>
