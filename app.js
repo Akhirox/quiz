@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyA3Kphg2UvYRLMWY2qQ86J6RsIkG639Dew",
@@ -16,142 +16,162 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-// Éléments HTML
-const loginBtn = document.getElementById('login-btn');
-const userInfo = document.getElementById('user-info');
-const mainMenu = document.getElementById('main-menu');
-const btnSolo = document.getElementById('btn-solo');
-const gameZone = document.getElementById('game-zone');
-
 let currentUser = null;
-let allQuestions = []; // Stockera toutes les questions
-let gameQuestions = []; // Les 10 questions de la partie
-let currentQIndex = 0;
-let score = 0;
-let timerInterval;
-let timeLeft = 14;
+let allQuestions = []; 
 
-// --- SYSTÈME DE NIVEAUX ---
+// --- GESTION DU PROFIL ET STATISTIQUES ---
 function getLevelInfo(totalXp) {
     let level = 1;
-    let xpNeeded = 50; // XP requis pour passer du niv 1 au niv 2
+    let xpNeeded = 50; 
     let currentXp = totalXp;
-
     while (currentXp >= xpNeeded) {
         currentXp -= xpNeeded;
         level++;
-        xpNeeded = Math.floor(xpNeeded * 1.5); // La difficulté augmente de 50% à chaque niveau
+        xpNeeded = Math.floor(xpNeeded * 1.5);
     }
     return { level, xpInCurrentLevel: currentXp, xpNeededForNext: xpNeeded };
 }
 
-function afficherProfil(user, totalXp) {
-    const lvlInfo = getLevelInfo(totalXp);
-    const progressPercent = (lvlInfo.xpInCurrentLevel / lvlInfo.xpNeededForNext) * 100;
-
-    userInfo.innerHTML = `
-        <img src="${user.photoURL}" style="width: 60px; border-radius: 50%; border: 2px solid var(--text-orange); margin-bottom: 10px;">
-        <div style="font-size: 1.2rem; font-weight: bold;">Niveau ${lvlInfo.level}</div>
-        <div style="font-size: 0.9rem; color: #ccc;">${lvlInfo.xpInCurrentLevel} / ${lvlInfo.xpNeededForNext} XP</div>
-        
-        <!-- Barre de progression -->
-        <div style="width: 200px; background: #333; height: 10px; border-radius: 5px; margin: 5px auto;">
-            <div style="width: ${progressPercent}%; background: var(--text-orange); height: 10px; border-radius: 5px; transition: width 0.5s ease-in-out;"></div>
-        </div>
-    `;
-}
-
-
-// --- AUTHENTIFICATION ---
-loginBtn.addEventListener('click', () => signInWithPopup(auth, provider));
-
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        loginBtn.style.display = 'none';
+        document.getElementById('login-btn').style.display = 'none';
         
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
 
         if (!userSnap.exists()) {
-            await setDoc(userRef, { displayName: user.displayName, photoURL: user.photoURL, xp: 0 });
+            // Création du profil avec la structure de Stats vierge
+            const defaultData = { 
+                displayName: user.displayName, 
+                photoURL: user.photoURL, 
+                xp: 0,
+                stats: {
+                    gamesPlayed: 0,
+                    correctAnswers: 0,
+                    totalAnswers: 0,
+                    totalAnswerTime: 0,
+                    themes: {}
+                }
+            };
+            await setDoc(userRef, defaultData);
             afficherProfil(user, 0);
         } else {
             afficherProfil(user, userSnap.data().xp);
         }
         
+        document.getElementById('btn-my-stats').style.display = 'block';
         chargerQuestions();
-        mainMenu.style.display = 'block';
+        chargerLeaderboard();
+        document.getElementById('main-menu').style.display = 'block';
     } else {
-        loginBtn.style.display = 'block';
-        userInfo.innerHTML = '';
-        mainMenu.style.display = 'none';
+        document.getElementById('login-btn').style.display = 'block';
+        document.getElementById('user-info').innerHTML = '';
+        document.getElementById('btn-my-stats').style.display = 'none';
+        document.getElementById('main-menu').style.display = 'none';
     }
 });
 
-// --- CHARGEMENT DES QUESTIONS ---
+document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
+
+function afficherProfil(user, totalXp) {
+    const lvlInfo = getLevelInfo(totalXp);
+    const progressPercent = (lvlInfo.xpInCurrentLevel / lvlInfo.xpNeededForNext) * 100;
+    document.getElementById('user-info').innerHTML = `
+        <img src="${user.photoURL}" style="width: 60px; border-radius: 50%; border: 2px solid var(--text-orange); margin-bottom: 10px;">
+        <div style="font-size: 1.2rem; font-weight: bold;">Niveau ${lvlInfo.level}</div>
+        <div style="font-size: 0.9rem; color: #ccc;">${lvlInfo.xpInCurrentLevel} / ${lvlInfo.xpNeededForNext} XP</div>
+        <div style="width: 200px; background: #333; height: 10px; border-radius: 5px; margin: 5px auto;">
+            <div style="width: ${progressPercent}%; background: var(--text-orange); height: 10px; border-radius: 5px;"></div>
+        </div>
+    `;
+}
+
+// --- LEADERBOARD & MODALES ---
+async function chargerLeaderboard() {
+    const q = query(collection(db, "users"), orderBy("xp", "desc"), limit(10));
+    const querySnapshot = await getDocs(q);
+    const list = document.getElementById('leaderboard-list');
+    list.innerHTML = '';
+    
+    let rank = 1;
+    querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const li = document.createElement('li');
+        li.className = 'leaderboard-item';
+        li.innerHTML = `
+            <span class="leaderboard-rank">#${rank}</span>
+            <img src="${data.photoURL}" style="width: 30px; border-radius: 50%;">
+            <span class="leaderboard-name">${data.displayName}</span>
+            <span class="leaderboard-xp">${data.xp} XP</span>
+        `;
+        // Clic sur un joueur = Ouverture de ses stats
+        li.addEventListener('click', () => afficherModaleStats(data));
+        list.appendChild(li);
+        rank++;
+    });
+}
+
+// Fonction pour afficher la fenêtre de statistiques
+async function afficherModaleStats(userData = null) {
+    // Si aucun joueur n'est précisé, on affiche les stats du joueur connecté
+    if (!userData) {
+        const docSnap = await getDoc(doc(db, "users", currentUser.uid));
+        userData = docSnap.data();
+    }
+
+    const stats = userData.stats || {};
+    const games = stats.gamesPlayed || 0;
+    const correct = stats.correctAnswers || 0;
+    const totalAns = stats.totalAnswers || 0;
+    const time = stats.totalAnswerTime || 0;
+    
+    const winRate = totalAns > 0 ? Math.round((correct / totalAns) * 100) : 0;
+    const avgSpeed = correct > 0 ? (time / correct).toFixed(1) : 0;
+
+    let themesHTML = '<h4>Top Thèmes</h4><ul style="font-size: 0.9rem; color: #ccc;">';
+    if (stats.themes) {
+        for (const [theme, tData] of Object.entries(stats.themes)) {
+            const tWinRate = Math.round((tData.correct / tData.total) * 100);
+            themesHTML += `<li>${theme} : ${tWinRate}% de réussite</li>`;
+        }
+    }
+    themesHTML += '</ul>';
+
+    document.getElementById('stats-content').innerHTML = `
+        <div style="text-align: center;">
+            <img src="${userData.photoURL}" style="width: 80px; border-radius: 50%; border: 3px solid var(--text-orange);">
+            <h2 style="color: var(--text-orange);">${userData.displayName}</h2>
+            <p><strong>Parties jouées :</strong> ${games}</p>
+            <p><strong>Bonnes réponses :</strong> ${winRate}%</p>
+            <p><strong>Vitesse moyenne :</strong> ${avgSpeed}s / réponse</p>
+            ${themesHTML}
+        </div>
+    `;
+    
+    document.getElementById('stats-modal').style.display = 'flex';
+}
+
+document.getElementById('btn-my-stats').addEventListener('click', () => afficherModaleStats());
+document.getElementById('close-stats').addEventListener('click', () => {
+    document.getElementById('stats-modal').style.display = 'none';
+});
+
+// --- CHARGEMENT QUESTIONS ---
 async function chargerQuestions() {
     const querySnapshot = await getDocs(collection(db, "questions"));
     allQuestions = [];
-    querySnapshot.forEach((doc) => {
-        allQuestions.push(doc.data());
-    });
-    console.log(`${allQuestions.length} questions chargées en mémoire.`);
+    querySnapshot.forEach((doc) => allQuestions.push(doc.data()));
 }
 
-// --- CORRECTEUR ORTHOGRAPHIQUE (Levenshtein) ---
-function levenshteinDistance(a, b) {
-    const matrix = [];
-    for (let i = 0; i <= b.length; i++) { matrix[i] = [i]; }
-    for (let j = 0; j <= a.length; j++) { matrix[0][j] = j; }
-    for (let i = 1; i <= b.length; i++) {
-        for (let j = 1; j <= a.length; j++) {
-            if (b.charAt(i - 1) === a.charAt(j - 1)) {
-                matrix[i][j] = matrix[i - 1][j - 1];
-            } else {
-                matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
-            }
-        }
-    }
-    return matrix[b.length][a.length];
-}
-
-function verifierReponse(input, correct) {
-    const userNorm = nettoyerTexte(input);
-    const correctNorm = nettoyerTexte(correct);
-    
-    // Si après nettoyage c'est exactement pareil, c'est gagné direct !
-    if (userNorm === correctNorm) return true;
-
-    // Calcul du nombre de fautes
-    const distance = levenshteinDistance(userNorm, correctNorm);
-    
-    // On prend la longueur du mot le plus long pour notre base de calcul
-    const maxLength = Math.max(userNorm.length, correctNorm.length);
-    
-    // Sécurité si les champs sont vides
-    if (maxLength === 0) return false;
-
-    // Calcul du pourcentage de ressemblance (1 = 100%, 0.85 = 85%)
-    const pourcentageRessemblance = (maxLength - distance) / maxLength;
-
-    // C'est valide SI on a au moins 85% de ressemblance OU si c'est un mot court avec juste 1 faute
-    return pourcentageRessemblance >= 0.85 || distance <= 1;
-}
-
-// --- NAVIGATION MENU ---
-const btnVsMenu = document.getElementById('btn-vs-menu');
-const vsLobby = document.getElementById('vs-lobby');
-const btnBackMenu = document.getElementById('btn-back-menu');
-
-btnVsMenu.addEventListener('click', () => {
-    mainMenu.style.display = 'none';
-    vsLobby.style.display = 'block';
+// --- NAVIGATION BASIQUE DES MENUS ---
+document.getElementById('btn-vs-menu').addEventListener('click', () => {
+    document.getElementById('main-menu').style.display = 'none';
+    document.getElementById('vs-lobby').style.display = 'block';
 });
-
-btnBackMenu.addEventListener('click', () => {
-    vsLobby.style.display = 'none';
-    mainMenu.style.display = 'block';
+document.getElementById('btn-back-menu').addEventListener('click', () => {
+    document.getElementById('vs-lobby').style.display = 'none';
+    document.getElementById('main-menu').style.display = 'block';
 });
 
 // --- MOTEUR DE JEU SOLO ---
