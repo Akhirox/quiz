@@ -16,11 +16,10 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-// Sons (Libres de droits)
+// Sons
 const audioCorrect = new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3');
 const audioWrong = new Audio('https://assets.mixkit.co/active_storage/sfx/2003/2003-preview.mp3');
-audioCorrect.volume = 0.5;
-audioWrong.volume = 0.5;
+audioCorrect.volume = 0.5; audioWrong.volume = 0.5;
 
 // Variables globales du jeu
 let currentUser = null;
@@ -32,8 +31,15 @@ let timerInterval;
 let timeLeft = 14;
 let attemptsLeft = 3;
 let isProcessingQuestion = false;
-
 let gameStatsTracker = { correct: 0, totalTime: 0, themes: {} };
+
+// Variables Multijoueur PeerJS (Gère jusqu'à 10 joueurs)
+let peer = null;
+let peerConn = null; // Utilisé si on est Invité (connexion vers l'Hôte)
+let peerConnections = []; // Utilisé si on est Hôte (connexions des Invités)
+let isHost = false;
+let isMultiplayer = false;
+let lobbyPlayers = []; // Liste des joueurs dans le lobby
 
 const mainMenu = document.getElementById('main-menu');
 const playMenu = document.getElementById('play-menu');
@@ -65,7 +71,7 @@ onAuthStateChanged(auth, async (user) => {
             afficherProfil(user, userSnap.data().xp);
         }
 
-        if (user.email === "arnaud.chbk@gmail.com") {
+        if (user.email === "arnaud.chbk@gmail.com") { // Ton mail
             if (!document.getElementById('btn-admin')) {
                 const adminBtn = document.createElement('button');
                 adminBtn.id = "btn-admin"; adminBtn.innerText = "🛠️ Admin"; adminBtn.className = "orange-btn";
@@ -113,17 +119,25 @@ document.getElementById('btn-menu-stats').addEventListener('click', () => affich
 document.getElementById('btn-menu-leaderboard').addEventListener('click', () => { chargerLeaderboard(); document.getElementById('leaderboard-modal').style.display = 'flex'; });
 document.getElementById('btn-back-to-main').addEventListener('click', () => { playMenu.style.display = 'none'; mainMenu.style.display = 'block'; });
 document.getElementById('btn-vs-menu').addEventListener('click', () => { playMenu.style.display = 'none'; vsLobby.style.display = 'block'; });
-document.getElementById('btn-back-to-play').addEventListener('click', () => { vsLobby.style.display = 'none'; playMenu.style.display = 'block'; });
 document.getElementById('close-stats').addEventListener('click', () => document.getElementById('stats-modal').style.display = 'none');
 document.getElementById('close-leaderboard').addEventListener('click', () => document.getElementById('leaderboard-modal').style.display = 'none');
 
-// --- LEADERBOARD & MODALES ---
+// Quitter le Lobby Multijoueur
+document.getElementById('btn-back-to-play').addEventListener('click', () => { 
+    if (peer) peer.destroy(); 
+    peer = null; peerConn = null; peerConnections = []; lobbyPlayers = [];
+    document.getElementById('room-buttons').style.display = 'flex';
+    document.getElementById('waiting-room').style.display = 'none';
+    vsLobby.style.display = 'none'; 
+    playMenu.style.display = 'block'; 
+});
+
+// --- STATS & QUESTIONS ---
 async function chargerLeaderboard() {
     const q = query(collection(db, "users"), orderBy("xp", "desc"), limit(10));
     const querySnapshot = await getDocs(q);
     const list = document.getElementById('leaderboard-list');
-    list.innerHTML = '';
-    let rank = 1;
+    list.innerHTML = ''; let rank = 1;
     querySnapshot.forEach((docSnap) => {
         const data = docSnap.data();
         const li = document.createElement('li'); li.className = 'leaderboard-item';
@@ -145,21 +159,15 @@ async function afficherModaleStats(userData = null) {
     const time = stats.totalAnswerTime || 0;
     
     const winRate = totalAns > 0 ? Math.round((correct / totalAns) * 100) : 0;
-    
-    // CORRECTION DU BUG ICI : On divise le temps total par le nombre TOTAL de questions (et non plus par le nombre de bonnes réponses)
     const avgSpeed = totalAns > 0 ? (time / totalAns).toFixed(1) : 0;
 
     let themesHTML = '<h4>Top Thèmes</h4><ul style="font-size: 0.9rem; color: #ccc; text-align: left;">';
     if (stats.themes) {
-        // Transformation en tableau pour le tri par pourcentage de réussite (décroissant)
         const themesArray = Object.entries(stats.themes)
             .filter(([theme, tData]) => tData.total > 0)
             .map(([theme, tData]) => ({ theme, rate: Math.round((tData.correct / tData.total) * 100) }))
-            .sort((a, b) => b.rate - a.rate); // Tri ici !
-
-        for (const t of themesArray) {
-            themesHTML += `<li><strong>${t.theme}</strong> : ${t.rate}% de réussite</li>`;
-        }
+            .sort((a, b) => b.rate - a.rate);
+        for (const t of themesArray) { themesHTML += `<li><strong>${t.theme}</strong> : ${t.rate}% de réussite</li>`; }
     }
     themesHTML += '</ul>';
 
@@ -181,11 +189,10 @@ async function chargerQuestions() {
     allQuestions = []; querySnapshot.forEach((doc) => allQuestions.push(doc.data()));
 }
 
+// --- CORRECTEUR ---
 function nettoyerTexte(str) {
-    let s = str.trim().toLowerCase();
-    s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    s = s.replace(/^(le |la |les |l'|l |un |une |des )/, "");
-    return s.trim();
+    let s = str.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return s.replace(/^(le |la |les |l'|l |un |une |des )/, "").trim();
 }
 function levenshteinDistance(a, b) {
     const matrix = [];
@@ -212,35 +219,163 @@ function verifierReponse(input, correct) {
     return false;
 }
 
-// --- MOTEUR DE JEU SOLO ---
+// --- LOGIQUE MULTIJOUEUR PEERJS (1 à 10 Joueurs) ---
+document.querySelectorAll('.room-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const roomNum = e.target.getAttribute('data-room');
+        const roomID = `chbk-quiz-room-${roomNum}`;
+        rejoindreOuCreerSalle(roomID);
+    });
+});
+
+function rejoindreOuCreerSalle(roomID) {
+    document.getElementById('room-buttons').style.display = 'none';
+    document.getElementById('waiting-room').style.display = 'block';
+    document.getElementById('waiting-msg').innerText = "Vérification de la salle...";
+    document.getElementById('btn-start-vs').style.display = 'none';
+
+    // On tente de créer le serveur de la salle
+    peer = new Peer(roomID);
+
+    peer.on('open', () => {
+        // SUCCÈS : Personne n'a pris cet ID, tu es l'HÔTE
+        isHost = true;
+        isMultiplayer = true;
+        peerConnections = [];
+        lobbyPlayers = [{ uid: currentUser.uid, name: currentUser.displayName }]; // On s'ajoute soi-même
+        majLobbyUI();
+        document.getElementById('btn-start-vs').style.display = 'block';
+
+        // L'hôte écoute les arrivées des invités
+        peer.on('connection', (conn) => {
+            if (peerConnections.length >= 9) { // 10 joueurs max (1 Hôte + 9 Invités)
+                conn.send({ type: 'LOBBY_FULL' });
+                setTimeout(() => conn.close(), 500);
+                return;
+            }
+            
+            peerConnections.push(conn);
+            
+            conn.on('data', (data) => {
+                if (data.type === 'PLAYER_INFO') {
+                    // Un nouveau joueur s'identifie
+                    lobbyPlayers.push({ uid: data.uid, name: data.name, connId: conn.peer });
+                    majLobbyUI();
+                    diffuserLobby(); // Informe tout le monde de la nouvelle liste
+                }
+            });
+
+            conn.on('close', () => {
+                // Un joueur a quitté
+                peerConnections = peerConnections.filter(c => c.peer !== conn.peer);
+                lobbyPlayers = lobbyPlayers.filter(p => p.connId !== conn.peer);
+                majLobbyUI();
+                diffuserLobby();
+            });
+        });
+    });
+
+    peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+            // ERREUR : L'ID de salle est pris, tu es un INVITÉ
+            peer = new Peer(); // Crée un peer avec ID aléatoire
+            peer.on('open', () => {
+                isHost = false;
+                isMultiplayer = true;
+                
+                // Connexion à l'Hôte
+                peerConn = peer.connect(roomID);
+                peerConn.on('open', () => {
+                    // Dire qui on est à l'hôte
+                    peerConn.send({ type: 'PLAYER_INFO', uid: currentUser.uid, name: currentUser.displayName });
+                });
+
+                // L'invité écoute les messages de l'Hôte
+                peerConn.on('data', (data) => {
+                    if (data.type === 'LOBBY_UPDATE') {
+                        lobbyPlayers = data.players;
+                        majLobbyUI();
+                    } else if (data.type === 'LOBBY_FULL') {
+                        alert("La salle est pleine (10 joueurs max) !");
+                        document.getElementById('btn-back-to-play').click();
+                    } else if (data.type === 'START_GAME') {
+                        gameQuestions = data.questions;
+                        lancerPartie();
+                    }
+                });
+            });
+        }
+    });
+}
+
+function majLobbyUI() {
+    document.getElementById('players-count').innerText = `${lobbyPlayers.length}/10`;
+    const list = document.getElementById('players-list');
+    list.innerHTML = '';
+    
+    lobbyPlayers.forEach(p => {
+        const li = document.createElement('li');
+        li.innerText = (p.uid === currentUser.uid) ? `${p.name} (Toi)` : p.name;
+        if (p.uid === lobbyPlayers[0].uid) li.innerText += " 👑"; // Petite couronne pour l'Hôte
+        list.appendChild(li);
+    });
+
+    if (isHost) {
+        document.getElementById('waiting-msg').innerText = "Tu es l'Hôte. Attends tes amis et lance quand tu veux !";
+    } else {
+        document.getElementById('waiting-msg').innerText = "Connecté ! En attente de l'Hôte pour lancer...";
+    }
+}
+
+// Fonction de l'hôte pour envoyer la liste des joueurs à tout le monde
+function diffuserLobby() {
+    if (!isHost) return;
+    peerConnections.forEach(conn => {
+        conn.send({ type: 'LOBBY_UPDATE', players: lobbyPlayers });
+    });
+}
+
+// L'Hôte lance la partie pour tout le monde
+document.getElementById('btn-start-vs').addEventListener('click', () => {
+    if (!isHost) return;
+    if (lobbyPlayers.length < 2) return alert("Il faut au moins 2 joueurs pour lancer un affrontement !");
+    
+    gameQuestions = allQuestions.sort(() => 0.5 - Math.random()).slice(0, 10);
+    
+    peerConnections.forEach(conn => {
+        conn.send({ type: 'START_GAME', questions: gameQuestions });
+    });
+    
+    lancerPartie();
+});
+
+// --- MOTEUR DE JEU (SOLO ET MULTI) ---
 document.getElementById('btn-solo').addEventListener('click', () => {
     if (allQuestions.length < 10) return alert("Pas assez de questions !");
     gameQuestions = allQuestions.sort(() => 0.5 - Math.random()).slice(0, 10);
+    isMultiplayer = false;
+    lancerPartie();
+});
+
+function lancerPartie() {
     score = 0; currentQIndex = 0;
     gameStatsTracker = { correct: 0, totalTime: 0, themes: {} }; 
     
     playMenu.style.display = 'none';
+    vsLobby.style.display = 'none';
     gameZone.style.display = 'block';
     
-    // Lancer le compte à rebours de 3 secondes
     const overlay = document.getElementById('countdown-overlay');
     const numberEl = document.getElementById('countdown-number');
     overlay.style.display = 'flex';
     
-    let count = 3;
-    numberEl.innerText = count;
-    
+    let count = 3; numberEl.innerText = count;
     const cInt = setInterval(() => {
         count--;
-        if (count > 0) {
-            numberEl.innerText = count;
-        } else {
-            clearInterval(cInt);
-            overlay.style.display = 'none';
-            afficherQuestion();
-        }
+        if (count > 0) { numberEl.innerText = count; } 
+        else { clearInterval(cInt); overlay.style.display = 'none'; afficherQuestion(); }
     }, 1000);
-});
+}
 
 function afficherQuestion() {
     clearInterval(timerInterval);
@@ -256,21 +391,14 @@ function afficherQuestion() {
     if (imgEl && q.imageUrl && q.imageUrl !== "") { imgEl.src = q.imageUrl; imgEl.style.display = 'block'; } 
     else if (imgEl) { imgEl.style.display = 'none'; }
 
-    // Setup input et barre
     const input = document.getElementById('answer-input');
     input.value = ''; input.disabled = false; input.focus();
     document.getElementById('submit-answer').style.display = 'inline-block';
     document.getElementById('feedback-msg').innerText = '';
-    
-    // Affichage des Cœurs
     document.getElementById('hearts-display').innerText = '❤️❤️❤️';
     
-    // Reset de la barre de temps visuelle (sans animation de recul)
     const tBar = document.getElementById('timer-bar');
-    tBar.style.transition = 'none';
-    tBar.style.width = '100%';
-    tBar.style.backgroundColor = '#4CAF50';
-    
+    tBar.style.transition = 'none'; tBar.style.width = '100%'; tBar.style.backgroundColor = '#4CAF50';
     setTimeout(() => { tBar.style.transition = 'width 1s linear, background-color 1s linear'; }, 50);
 
     timeLeft = 14;
@@ -280,8 +408,6 @@ function afficherQuestion() {
     timerInterval = setInterval(() => {
         timeLeft--;
         document.getElementById('timer-text').innerText = timeLeft;
-        
-        // Logique de la couleur de la barre
         const percentage = (timeLeft / 14) * 100;
         tBar.style.width = `${percentage}%`;
         
@@ -308,8 +434,7 @@ function traiterReponse(userAnswer) {
         isProcessingQuestion = true;
         clearInterval(timerInterval);
         score++;
-        
-        audioCorrect.play(); // Son de réussite
+        audioCorrect.play(); 
 
         const timeTaken = 14 - timeLeft;
         gameStatsTracker.correct++;
@@ -326,12 +451,11 @@ function traiterReponse(userAnswer) {
         
     } else {
         attemptsLeft--;
-        audioWrong.play(); // Son d'erreur
+        audioWrong.play(); 
 
         if (timeLeft <= 0) attemptsLeft = 0; 
 
         if (attemptsLeft > 0) {
-            // Mise à jour visuelle des cœurs
             document.getElementById('hearts-display').innerText = '❤️'.repeat(attemptsLeft);
             feedback.innerText = `❌ Faux ! Encore une chance...`;
             feedback.style.color = "#FF8C00";
@@ -339,7 +463,7 @@ function traiterReponse(userAnswer) {
         } else {
             isProcessingQuestion = true;
             clearInterval(timerInterval);
-            document.getElementById('hearts-display').innerText = ''; // Plus de cœurs
+            document.getElementById('hearts-display').innerText = '💔';
             
             gameStatsTracker.totalTime += 14; 
             gameStatsTracker.themes[q.theme].total++;
@@ -394,6 +518,9 @@ async function passerQuestionSuivante() {
         document.getElementById('end-score').innerText = `${score}/10`;
         document.getElementById('end-xp').innerText = `+${score} XP`;
         document.getElementById('end-game-modal').style.display = 'flex';
+        
+        if (peer) peer.destroy(); 
+        peer = null; peerConn = null; peerConnections = []; lobbyPlayers = [];
     }
 }
 
